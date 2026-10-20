@@ -58,7 +58,8 @@ details.tools div { font-family:ui-monospace, Menlo, monospace; font-size:11px; 
 .tabs button.on { color:var(--fg); border-bottom-color:var(--accent); }
 #offices, #staff, #history { overflow:auto; }
 .row { padding:9px 12px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:flex-start; cursor:pointer; }
-.row:hover { background:var(--bubble); }
+.row:hover, .row.on { background:var(--bubble); }
+.row.on .t { color:var(--accent); }
 .row .main { flex:1; min-width:0; }
 .row .t { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .row .s { font-size:11px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

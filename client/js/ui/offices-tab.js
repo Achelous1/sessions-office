@@ -2,10 +2,11 @@
 import { officeView } from '../world/offices.js';
 import { focusOnBounds, localOfficeBounds } from './camera-focus.js';
 import { el } from './labels.js';
+import { selectedOffice, selectOffice, onOfficeChange, keepSelectionIn } from './office-selection.js';
 
 const ICON = { local: '🏢 ', remote: '📡 ', cloud: '☁️ ' };
 const list = document.getElementById('offices');
-let renderedKey = '';
+let renderedKey = '', lastRender = null;
 
 const countsOf = sessions => {
   const busy = sessions.filter(s => s.status === 'busy').length, waiting = sessions.filter(s => s.status === 'waiting').length;
@@ -13,10 +14,14 @@ const countsOf = sessions => {
 };
 
 function officeRow({ id, kind, name }, sessions, bounds) {
-  const row = el('div', 'row'), main = el('div', 'main');
+  const row = el('div', 'row' + (id === selectedOffice() ? ' on' : '')), main = el('div', 'main');
   main.append(el('div', 't', ICON[kind] + name), el('div', 's', countsOf(sessions)));
   row.append(main);
-  row.onclick = () => { const b = bounds(); if (b) focusOnBounds(b); };
+  row.onclick = () => {
+    const b = bounds();
+    if (b) focusOnBounds(b);
+    selectOffice(id);
+  };
   return row;
 }
 
@@ -28,7 +33,9 @@ function remoteNote(remote) {
 }
 
 export function renderOffices(local, others, remote) {
-  const key = JSON.stringify([local.map(s => s.status), others.map(o => [o.workspace.id, o.sessions.map(s => s.status)]), remote]);
+  lastRender = [local, others, remote];
+  keepSelectionIn(['local', ...others.map(o => o.workspace.id)]);
+  const key = JSON.stringify([selectedOffice(), local.map(s => s.status), others.map(o => [o.workspace.id, o.sessions.map(s => s.status)]), remote]);
   if (key === renderedKey) return;
   renderedKey = key;
   const rows = [officeRow({ id: 'local', kind: 'local', name: '로컬' }, local, localOfficeBounds)];
@@ -38,3 +45,5 @@ export function renderOffices(local, others, remote) {
   const note = remoteNote(remote);
   list.replaceChildren(...rows, ...(note ? [note] : []));
 }
+
+onOfficeChange(() => { if (lastRender) renderOffices(...lastRender); }); // move the highlight

@@ -13,6 +13,20 @@ const lamps = []; // { light, bulb } — pendant lamps are rebuilt with the room
 export function clearLamps() { lamps.length = 0; }
 export function addLamp(light, bulb) { lamps.push({ light, bulb }); }
 
+// Lights that come and go with their owner (a cloud desk's mood lamp): { light, bulb, night: intensity, glow: color }.
+// Off by day, on at night. Returns a function that stops tracking it.
+const ownedLights = new Set();
+function applyOwnedLight(entry) {
+  const night = current === 'night';
+  entry.light.intensity = night ? entry.night : 0;
+  entry.bulb.material.color.setHex(night ? entry.glow : 0xcfc6b4);
+}
+export function addThemedLight(entry) {
+  ownedLights.add(entry);
+  applyOwnedLight(entry);
+  return () => ownedLights.delete(entry);
+}
+
 function storedTheme() {
   try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
 }
@@ -30,6 +44,7 @@ export function applyTheme() {
   sunLight.color.setHex(t.sun[0]); sunLight.intensity = t.sun[1];
   glassMaterial.color.setHex(t.glass[0]); glassMaterial.opacity = t.glass[1];
   for (const { light, bulb } of lamps) { light.intensity = t.lamp; bulb.material.color.setHex(t.bulb); }
+  ownedLights.forEach(applyOwnedLight);
 }
 
 export function initThemeToggle(button) {

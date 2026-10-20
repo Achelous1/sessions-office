@@ -6,6 +6,7 @@ import { desks, firedIds } from '../world/state.js';
 import { openChat, closeChat, selectedSession } from './chat-panel.js';
 import { focusOnEmployee } from './camera-focus.js';
 import { HOST_NAME, STATUS_NAME, placeOf, el } from './labels.js';
+import { selectedOffice, onOfficeChange, officeOf } from './office-selection.js';
 
 const STATUS_ORDER = { waiting: 0, busy: 1 }; // everyone else after
 const COPIED_MS = 1500;
@@ -13,7 +14,7 @@ const COPIED_MS = 1500;
 const drawer = document.getElementById('drawer');
 const staffList = document.getElementById('staff'), historyList = document.getElementById('history');
 const panes = { offices: document.getElementById('offices'), staff: staffList, history: historyList };
-let renderedStaffKey = '';
+let renderedStaffKey = '', lastSessions = [];
 let onFired = () => {};
 
 function confirmFire(s) {
@@ -48,13 +49,16 @@ function staffRow(s) {
   return row;
 }
 
-// Waiting sessions first, then busy, then idle. Re-renders only when something visible changed.
+// The employees of the office selected in the 사무실 tab: waiting first, then busy, then idle.
+// Re-renders only when something visible changed.
 export function renderStaff(sessions) {
-  const rows = [...sessions].sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
-  const key = JSON.stringify(rows.map(s => [s.id, s.status, s.turns, s.title]));
+  lastSessions = sessions;
+  const office = selectedOffice();
+  const rows = sessions.filter(s => officeOf(s) === office).sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
+  const key = JSON.stringify([office, rows.map(s => [s.id, s.status, s.turns, s.title])]);
   if (key === renderedStaffKey) return;
   renderedStaffKey = key;
-  staffList.replaceChildren(...rows.map(staffRow));
+  staffList.replaceChildren(...(rows.length ? rows.map(staffRow) : [el('div', 'empty', '이 사무실에는 직원이 없습니다.')]));
 }
 
 async function copyCommand(command, button) {
@@ -98,3 +102,5 @@ export function initStaffDrawer(toggleButton, onFiredSession) {
   toggleButton.onclick = () => { drawer.hidden = !drawer.hidden; };
   for (const button of drawer.querySelectorAll('.tabs button')) button.onclick = () => selectTab(button);
 }
+
+onOfficeChange(() => renderStaff(lastSessions));

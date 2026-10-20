@@ -14,6 +14,23 @@ function puff(parent, x, y, z, w, d, h = Math.min(w, d) * .55, mat = cloudMat) {
   vox(parent, mat, [w * .6, h * .4, d * .6], [x, y + h * .6, z]);
 }
 
+const MOOD_GLOW = 0xffc27a, MOOD_LIGHT = 0xffb066, MOOD_INTENSITY = 9, MOOD_RANGE = 7;
+
+// A small floor lamp on the cloud, to the worker's right (they face -z, so right is +x).
+// Returns the light and its bulb for the theme to switch on at night.
+function moodLamp(g) {
+  const lamp = new THREE.Group(); lamp.position.set(2, 0, 1.3); g.add(lamp);
+  vox(lamp, 0x4a4038, [.6, .1, .6], [0, 0, 0]);          // base
+  vox(lamp, 0x6b5a48, [.1, 2.1, .1], [0, .1, 0]);        // pole
+  vox(lamp, 0x6b5a48, [.5, .08, .08], [-.2, 2.2, 0]);     // arm leaning over the desk
+  const bulb = vox(lamp, new THREE.MeshBasicMaterial({ color: MOOD_GLOW }), [.28, .28, .28], [-.45, 1.82, 0]);
+  bulb.castShadow = false;
+  for (const [w, y] of [[.9, 1.95], [.7, 2.15], [.5, 2.3]]) vox(lamp, 0xe8a25c, [w, .2, w], [-.45, y, 0]); // stepped shade
+  const light = new THREE.PointLight(MOOD_LIGHT, 0, MOOD_RANGE, 1.6);
+  light.position.set(-.45, 1.6, 0); lamp.add(light);
+  return { light, bulb, night: MOOD_INTENSITY, glow: MOOD_GLOW };
+}
+
 export function buildCloudDesk(g) {
   // the cloud they float on: top at y 0 under the desk and the chair
   for (const [x, z, w, d] of [[0, .4, 4.4, 4.2], [-1.6, 1.8, 2, 2], [1.7, -.4, 2, 2], [.3, 2.6, 2.4, 1.8], [-1.2, -1, 2.2, 1.6]]) {
@@ -27,4 +44,5 @@ export function buildCloudDesk(g) {
   // chair: a round cushion with a little cloud backrest
   puff(g, 0, 0, 1.6, 1.2, 1.2, .55);
   puff(g, 0, .45, 2.15, 1.1, .45, .9);
+  return moodLamp(g);
 }

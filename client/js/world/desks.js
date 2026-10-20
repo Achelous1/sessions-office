@@ -8,6 +8,7 @@ import { desks, clickables } from './state.js';
 import { resolve, goTo, stepAgent } from './navigation.js';
 import { updateLaptopScreen } from './laptop-screen.js';
 import { buildCloudDesk } from './cloud-desk.js';
+import { addThemedLight } from '../core/theme.js';
 import { CHAIR, HELD_ITEM, hash } from './palette.js';
 import { person, pose, sip } from '../characters/person.js';
 import { makeQuestionMark, updateQuestionMark } from '../characters/question-mark.js';
@@ -69,19 +70,20 @@ function buildWoodenDesk(g, sessionId) {
 // cloud sessions sit on their own cloud, at a cloud desk on a cloud chair
 function buildDesk(session) {
   const group = new THREE.Group(); scene.add(group);
-  if (session.workspace?.kind === 'cloud') buildCloudDesk(group);
+  let untrackLight = null;
+  if (session.workspace?.kind === 'cloud') untrackLight = addThemedLight(buildCloudDesk(group));
   else buildWoodenDesk(group, session.id);
-  return { group, screen: addLaptop(group) };
+  return { group, screen: addLaptop(group), untrackLight };
 }
 
 // A new local session walks in from the door; ones already running on page load, and remote ones, start in place.
 export function createDesk(session, slot, walkInFromDoor) {
-  const { group, screen } = buildDesk(session);
+  const { group, screen, untrackLight } = buildDesk(session);
   markClickable(group, session.id);
   const obj = person(session.id); scene.add(obj); markClickable(obj, session.id);
   const worker = { obj, loc: { kind: 'entry' }, path: [], phase: hash(session.id) % 1000 };
   const desk = {
-    id: session.id, session, slot, group, screen, worker,
+    id: session.id, session, slot, group, screen, worker, untrackLight,
     questionMark: makeQuestionMark(), clawds: [],
     label: overlayElement('label'), bubble: hiddenBubble('bubble a'), bubbleUntil: 0,
     turns: session.turns, answerTs: session.lastAnswer?.ts,
@@ -141,6 +143,7 @@ export function sendHome(desk, crying) {
 
 function removeDesk(desk) {
   scene.remove(desk.questionMark, desk.group, desk.worker.obj);
+  desk.untrackLight?.();
   desk.label.remove(); desk.bubble.remove();
   releaseSpot(desk);
   desks.delete(desk.id);
