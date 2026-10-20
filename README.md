@@ -1,25 +1,100 @@
-# sessions-office
+# Session Office
 
-로컬에서 실행 중인 Claude Code 세션을 3D 복셀 오피스로 보여 주는 대시보드입니다. 외부 의존성 없이 Node.js(v18 이상)만 있으면 됩니다.
+내 PC에서 돌아가는 **Claude Code 세션들을 3D 복셀 사무실로 보여 주는 대시보드**입니다.
+세션 하나가 직원 한 명이 되어, 일할 때는 자리에 앉아 타이핑하고, 쉴 때는 탕비실·라운지로 가고, 종료되면 짐을 싸서 퇴근합니다.
+캐릭터를 클릭하면 그 세션의 대화 내역을 오른쪽 패널에서 바로 볼 수 있습니다.
 
-## 실행
+외부 의존성이 없습니다. Node.js(v18 이상)만 있으면 됩니다.
 
+![Session Office 전체 화면](docs/media/overview.png)
+
+## 주요 기능
+
+### 세션 = 직원
+- **작업 중** 세션은 자기 책상에 앉아 타이핑합니다. 셸 명령이나 백그라운드 작업이 돌고 있으면 노트북 화면에 터미널 출력이 스크롤됩니다.
+- **답변 대기** 중인 세션(권한 확인, 질문 등) 머리 위에는 `?`가 빙글빙글 돕니다.
+- **휴식 중**(idle) 세션은 탕비실로 가서 커피·간식을 먹거나, 라운지에서 빈백에 앉거나 탁구를 칩니다.
+- 사용자(파란 옷의 방문자)는 평소 화이트보드에 무언가를 쓰다가, 세션에 질문이 생기면 해당 책상까지 걸어가 말풍선으로 질문합니다.
+- 이름표의 아이콘은 세션이 돌아가는 곳을 나타냅니다. 🐧 Linux/WSL, 🪟 Windows.
+
+### 대화 내역 패널
+캐릭터나 직원 목록을 클릭하면 카메라가 그 직원에게 다가가고, 오른쪽 패널에 상태·턴 수·작업 경로·최근 도구와 함께 대화 내역이 열립니다(위 스크린샷 오른쪽).
+답변은 마크다운으로 렌더링되고, 도구 호출은 접을 수 있는 묶음으로 정리됩니다. 패널 왼쪽 가장자리를 드래그하면 너비를 조절할 수 있습니다.
+
+### 서브에이전트 = 작은 Clawd
+세션이 서브에이전트를 돌리는 동안, 서브에이전트 하나당 작은 복셀 Claude(Clawd) 한 마리가 노트북 주변에 올라앉아 들썩거리며 일합니다. 표정도 수시로 바뀝니다.
+
+| 정지 화면 | 동작 ([원본 영상](docs/media/subagents.mp4)) |
+|---|---|
+| ![노트북 주변의 서브에이전트들](docs/media/subagents.png) | ![서브에이전트 애니메이션](docs/media/subagents.gif) |
+
+### OpenRig 연동 (선택)
+OpenRig 데몬이 실행 중이면(`~/.openrig/daemon.json`), 같은 리그에 속한 세션들이 같은 pod에 모여 앉고, 위임 관계가 책상 사이의 비행 경로 곡선과 그 위를 나는 작은 복셀 비행기로 표시됩니다. OpenRig가 없으면 이 기능은 그냥 꺼져 있습니다.
+
+![OpenRig 위임 관계 표시](docs/media/openrig-links.png)
+
+### 해고(세션 종료)와 복구
+`☰ 직원 목록`에서 **해고**를 누르면 확인 후 해당 Claude Code 프로세스를 종료합니다(터미널에서 Ctrl+C를 누른 것과 같습니다).
+해고된 직원은 "ㅠㅠ 그동안 감사했습니다…"라고 울면서 사무실을 나갑니다. 그냥 끝난 세션은 울지 않고 퇴근합니다.
+
+![해고된 직원이 울면서 퇴근하는 모습](docs/media/fired.png)
+
+종료된 세션은 **히스토리 (복구)** 탭에 남습니다. `복사` 버튼으로 `cd <작업 경로> && claude --resume <세션 ID>` 명령을 복사해 터미널에 붙여 넣으면 이어서 작업할 수 있습니다.
+
+### 기타
+- **낮/밤 테마**: 7시~19시는 낮, 그 외는 밤 테마로 자동 설정되며 상단 버튼으로 바꿀 수 있습니다. 밤에는 펜던트 조명이 켜집니다.
+- **⤢ 전체 보기**: 현재 시점을 유지한 채 사무실 전체가 화면에 들어오도록 맞춥니다.
+- 카메라 쪽 벽은 심즈처럼 무릎 높이로 낮아져 안이 잘 보입니다. 마우스로 회전·확대할 수 있습니다.
+
+## 실행 방법
+
+### 요구 사항
+- Node.js **v18 이상**
+- Claude Code를 쓰고 있는 PC (`~/.claude` 폴더를 읽습니다)
+
+### macOS / Linux / WSL
 ```bash
-./start.sh            # macOS / Linux / WSL
-PORT=5000 ./start.sh  # 포트 변경
+git clone https://github.com/Achelous1/sessions-office.git
+cd sessions-office
+./start.sh
 ```
+서버를 띄우고 브라우저를 자동으로 엽니다. 이미 실행 중이면 브라우저만 엽니다. 종료는 `Ctrl+C`입니다.
 
-Windows에서는 `start.cmd`를 더블클릭합니다(WSL에 node가 있으면 WSL에서 실행, `NO_WSL=1`로 Windows 전용 실행).
+### Windows
+`start.cmd`를 더블클릭합니다.
+- WSL에 node가 설치돼 있으면 WSL에서 실행합니다. 이 경우 **WSL 세션과 Windows 세션을 모두** 볼 수 있습니다.
+- WSL을 쓰지 않으려면 실행 전에 `set NO_WSL=1`을 지정합니다.
 
-직접 실행: `node server.js` 후 http://localhost:4545 접속.
+### 직접 실행
+```bash
+node server.js     # 또는 npm start
+```
+그다음 브라우저에서 http://localhost:4545 를 엽니다.
+
+### 환경 변수
+| 이름 | 기본값 | 설명 |
+|---|---|---|
+| `PORT` | `4545` | 서버 포트 (`PORT=5000 ./start.sh`) |
+| `SHOW_SDK` | (꺼짐) | `1`이면 SDK로 띄운 세션(claude-mem observer 등)도 표시 |
+| `NO_WSL` | (꺼짐) | Windows `start.cmd`에서 WSL 대신 Windows node로 실행 |
+
+## 동작 방식과 보안
+
+- 서버는 `~/.claude/sessions/*.json`에서 살아 있는 세션을 찾고, `~/.claude/projects/` 아래의 트랜스크립트(`.jsonl`)를 읽어 대화 내역과 상태를 만듭니다. WSL에서는 `/mnt/c/Users/*/.claude`도 함께 읽습니다.
+- 세션 파일의 PID와 프로세스 시작 시각을 대조해, PID가 재사용된 오래된 세션은 걸러 냅니다.
+- 서버는 **127.0.0.1에만 바인딩**되므로 다른 PC에서는 접속할 수 없습니다. 해고 API는 커스텀 헤더를 요구해, 다른 웹사이트가 브라우저를 통해 세션을 종료할 수 없게 막습니다.
+- 외부로 데이터를 보내지 않습니다. three.js와 marked는 `vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
 
 ## 구성
 
-- `server.js` — `~/.claude`의 세션·트랜스크립트를 읽는 HTTP 서버 (127.0.0.1에만 바인딩)
-- `index.html` — three.js 기반 화면
-- `vendor/` — three.js, OrbitControls, marked(v12.0.2) 번들 사본
-
-환경 변수: `PORT`(기본 4545), `SHOW_SDK=1`(SDK 세션 표시)
+```
+server.js     세션·트랜스크립트를 읽는 HTTP 서버 (의존성 없음)
+index.html    three.js 기반 화면과 UI
+start.sh      macOS / Linux / WSL 실행 스크립트
+start.cmd     Windows 실행 스크립트
+vendor/       three.js, OrbitControls, marked v12.0.2
+docs/media/   README용 스크린샷·영상
+```
 
 ## 라이선스
 
