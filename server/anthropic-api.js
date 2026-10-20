@@ -38,12 +38,15 @@ const CREDENTIALS_FILE = path.join(os.homedir(), '.claude', '.credentials.json')
 const accessTokenOf = oauth => oauth?.accessToken ?? oauth?.access_token;
 const hasLogin = stored => !!accessTokenOf(stored?.claudeAiOauth);
 
-// What a credentials store holds, by key name and value type only (never values), to explain a missing login:
-// "항목 [claudeAiOauth{refreshToken, expiresAt}]"
+// What a credentials store holds, by key name and value shape only (never values), to explain a missing login:
+// "항목 [claudeAiOauth{accessToken: 빈 문자열, expiresAt: number}]"
+const shapeOf = value => value === null ? 'null' : value === '' ? '빈 문자열'
+  : typeof value === 'string' ? `문자열 ${value.length}자` : Array.isArray(value) ? 'array' : typeof value;
 function describe(where, stored) {
   if (!stored) return `${where}: 없음`;
-  const keys = Object.entries(stored).map(([key, value]) =>
-    value && typeof value === 'object' ? `${key}{${Object.keys(value).join(', ')}}` : `${key}(${value === null ? 'null' : typeof value})`);
+  const keys = Object.entries(stored).map(([key, value]) => value && typeof value === 'object' && !Array.isArray(value)
+    ? `${key}{${Object.entries(value).map(([k, v]) => `${k}: ${shapeOf(v)}`).join(', ')}}`
+    : `${key}: ${shapeOf(value)}`);
   return `${where}: 항목 [${keys.join(', ') || '없음'}]`;
 }
 
