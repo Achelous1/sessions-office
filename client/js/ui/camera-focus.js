@@ -1,23 +1,37 @@
-// Smooth camera moves: glide to an employee, or zoom out to fit the whole room. Keeps the current viewing angle.
+// Smooth camera moves: glide to an employee, or zoom out to fit an office (or all of them). Keeps the viewing angle.
 import * as THREE from 'three';
 import { camera, controls } from '../core/engine.js';
 import { L } from '../world/layout.js';
+import { allOfficeViews } from '../world/offices.js';
 
 const EMPLOYEE_DISTANCE = 11;
 const FIT_TIGHTNESS = .72; // the bounding sphere is loose for a flat room
+const MARGIN = 1;
 let focus = null; // { at: Vector3, dist }
 
 controls.addEventListener('start', () => { focus = null; }); // the user grabbed the camera: stop the glide
 
 export function focusOnEmployee(person) {
-  focus = { at: person.position.clone().setY(1.5), dist: EMPLOYEE_DISTANCE };
+  focus = { at: person.position.clone().setY(person.position.y + 1.5), dist: EMPLOYEE_DISTANCE };
 }
 
-export function fitRoom() {
-  const width = L.RX - L.PX + 2, depth = L.front - L.back + 2, radius = Math.hypot(width, depth, 5) / 2;
+export const localOfficeBounds = () => ({ minX: L.PX, maxX: L.RX, minZ: L.back, maxZ: L.front, y: 0 });
+
+// bounds: { minX, maxX, minZ, maxZ, y }
+export function focusOnBounds({ minX, maxX, minZ, maxZ, y = 0 }) {
+  const width = maxX - minX + 2 * MARGIN, depth = maxZ - minZ + 2 * MARGIN, radius = Math.hypot(width, depth, 5) / 2;
   const vFov = camera.fov * Math.PI / 180, hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
-  const center = new THREE.Vector3((L.PX + L.RX) / 2, 0, (L.back + L.front) / 2);
-  focus = { at: center, dist: FIT_TIGHTNESS * radius / Math.sin(Math.min(vFov, hFov) / 2) };
+  focus = { at: new THREE.Vector3((minX + maxX) / 2, y, (minZ + maxZ) / 2), dist: FIT_TIGHTNESS * radius / Math.sin(Math.min(vFov, hFov) / 2) };
+}
+
+// every office, local and remote
+export function fitAll() {
+  const all = [localOfficeBounds(), ...allOfficeViews()];
+  focusOnBounds({
+    minX: Math.min(...all.map(b => b.minX)), maxX: Math.max(...all.map(b => b.maxX)),
+    minZ: Math.min(...all.map(b => b.minZ)), maxZ: Math.max(...all.map(b => b.maxZ)),
+    y: Math.max(...all.map(b => b.y)) / 2,
+  });
 }
 
 export function stepCameraFocus(dt) {

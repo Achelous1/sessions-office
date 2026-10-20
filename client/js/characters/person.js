@@ -36,6 +36,7 @@ export function person(seed, shirt) {
 }
 
 // kind: 'stand' | 'sit' | 'walk'. Resets head and arms, so gestures are applied after the pose.
+// userData.baseY lifts a person off the ground floor (the cloud office).
 export function pose(p, kind, now, phase = 0) {
   const u = p.userData, [left, right] = u.legs, [leftArm, rightArm] = u.arms;
   const swing = kind === 'walk' ? Math.sin(now / 90 + phase) * .6 : 0;
@@ -44,7 +45,7 @@ export function pose(p, kind, now, phase = 0) {
   left.knee.rotation.x = sit ? Math.PI / 2 : Math.max(0, -swing) * 1.2; right.knee.rotation.x = sit ? Math.PI / 2 : Math.max(0, swing) * 1.2;
   leftArm.rotation.set(-swing, 0, 0); rightArm.rotation.set(swing, 0, 0);
   u.head.rotation.set(0, 0, 0);
-  p.position.y = sit ? -.3 : (kind === 'walk' ? Math.abs(Math.sin(now / 90 + phase)) * .08 : 0);
+  p.position.y = (u.baseY ?? 0) + (sit ? -.3 : (kind === 'walk' ? Math.abs(Math.sin(now / 90 + phase)) * .08 : 0));
 }
 
 // raise the right hand to the mouth every `period` ms (drinking / eating)

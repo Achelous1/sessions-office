@@ -4,6 +4,7 @@ const getJson = async url => (await fetch(url)).json();
 export const fetchSessions = () => getJson('/api/sessions');
 export const fetchRigs = () => getJson('/api/rigs');
 export const fetchHistory = () => getJson('/api/history');
+export const fetchRemoteStatus = () => getJson('/api/remote'); // { enabled, error }
 
 // null when the session is gone
 export async function fetchSession(id) {

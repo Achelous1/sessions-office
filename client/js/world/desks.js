@@ -16,8 +16,11 @@ import { cry } from '../characters/crying.js';
 const ANSWER_BUBBLE_MS = 7000;
 const LEAVE_SPEED = 4.5, CRYING_SPEED = 2.6;
 const SITTING_ACTS = new Set(['sit', 'sofa', 'beanbag']);
+const FADE_MS = 1600;
 
-const isAtWork = session => session.status === 'busy' || session.status === 'waiting' || !!session.rig; // rig members never leave their desk
+const isRemote = session => (session.workspace?.kind ?? 'local') !== 'local';
+// rig members never leave their desk, and remote offices have nowhere else to go
+const isAtWork = session => session.status === 'busy' || session.status === 'waiting' || !!session.rig || isRemote(session);
 
 // ---------- hangout spots ----------
 const takenSpots = new Map(); // spot index -> desk id
@@ -57,7 +60,7 @@ function buildDesk(sessionId) {
   return { group: g, screen };
 }
 
-// A new session walks in from the door; ones already running on page load start in place.
+// A new local session walks in from the door; ones already running on page load, and remote ones, start in place.
 export function createDesk(session, slot, walkInFromDoor) {
   const { group, screen } = buildDesk(session.id);
   markClickable(group, session.id);
@@ -70,14 +73,15 @@ export function createDesk(session, slot, walkInFromDoor) {
     turns: session.turns, answerTs: session.lastAnswer?.ts,
   };
   desks.set(session.id, desk);
-  if (!walkInFromDoor) worker.loc = isAtWork(session) ? { kind: 'seat', d: session.id } : claimSpot(desk);
+  if (!walkInFromDoor || isRemote(session)) worker.loc = isAtWork(session) ? { kind: 'seat', d: session.id } : claimSpot(desk);
   return desk;
 }
 
 export function placeDesk(desk, slot) {
   desk.slot = slot;
-  desk.group.position.set(slot.desk.x, 0, slot.desk.z);
+  desk.group.position.set(slot.desk.x, slot.y ?? 0, slot.desk.z);
   desk.group.rotation.y = slot.deskRot;
+  desk.worker.obj.userData.baseY = slot.y ?? 0;
 }
 
 export function sayAnswer(desk, text, now = performance.now()) {
@@ -86,8 +90,30 @@ export function sayAnswer(desk, text, now = performance.now()) {
 }
 
 // ---------- leaving ----------
-// A closed session clears its desk at once and walks out; a fired one cries on the way.
+// A remote employee (closed or archived) fades away at the desk, slowly rising like a ghost.
+function fadeAway(desk) {
+  desk.fading = { since: performance.now() };
+  forgetClickables(mesh => mesh.userData.sid === desk.id);
+  desk.questionMark.visible = false;
+  for (const obj of [desk.group, desk.worker.obj]) obj.traverse(o => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone(); // materials are shared between desks
+    o.material.transparent = true;
+  });
+}
+
+function stepFading(desk, now) {
+  const t = Math.min(1, (now - desk.fading.since) / FADE_MS);
+  for (const obj of [desk.group, desk.worker.obj]) obj.traverse(o => { if (o.isMesh) o.material.opacity = 1 - t; });
+  desk.worker.obj.userData.baseY = (desk.slot.y ?? 0) + t * 1.5;
+  desk.label.style.opacity = 1 - t;
+  pose(desk.worker.obj, 'sit', now);
+  return t >= 1;
+}
+
+// A closed local session clears its desk at once and walks out; a fired one cries on the way.
 export function sendHome(desk, crying) {
+  if (isRemote(desk.session)) return fadeAway(desk);
   desk.leaving = { crying };
   const deskMeshes = new Set(); desk.group.traverse(o => deskMeshes.add(o));
   forgetClickables(mesh => deskMeshes.has(mesh));
@@ -134,6 +160,10 @@ function animateActivity(worker, act, typing, now) {
 
 function stepWorker(desk, dt, now) {
   const worker = desk.worker, u = worker.obj.userData;
+  if (desk.fading) {
+    if (stepFading(desk, now)) removeDesk(desk);
+    return;
+  }
   if (desk.leaving) { // walk out the door, then gone for good
     if (!stepAgent(worker, dt, now)) return removeDesk(desk);
     if (desk.leaving.crying) cry(worker.obj, now);
@@ -158,6 +188,6 @@ export function stepDesks(dt, now) {
     pin(desk.label, desk.worker.obj, 3.4);
     pin(desk.bubble, desk.worker.obj, 4.3);
     desk.clawds.forEach(clawd => animateClawd(clawd, now));
-    updateQuestionMark(desk.questionMark, desk.worker.obj, !desk.leaving && desk.session.status === 'waiting', now);
+    updateQuestionMark(desk.questionMark, desk.worker.obj, !desk.leaving && !desk.fading && desk.session.status === 'waiting', now);
   }
 }

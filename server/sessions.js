@@ -6,6 +6,7 @@ const { isAlive } = require('./processes');
 const { findTranscript, parseTranscript } = require('./transcripts');
 
 const CHAT_LIMIT = 300;
+const LOCAL_WORKSPACE = { id: 'local', kind: 'local', name: '로컬' };
 const HISTORY_LIMIT = 60;
 const LAST_USER_PREVIEW = 200;
 // Newer Claude Code marks finished subagents; older builds never do, so "still writing lately" covers those.
@@ -60,7 +61,7 @@ function summarize(session) {
   const parsed = transcript ? parseTranscript(transcript) : { title: null, turns: 0, chat: [] };
   return {
     id: session.sessionId, pid: session.pid, name: session.name, title: parsed.title, cwd: session.cwd,
-    status: session.status, entrypoint: session.entrypoint, host: session.src.host, startedAt: session.startedAt,
+    status: session.status, entrypoint: session.entrypoint, host: session.src.host, workspace: LOCAL_WORKSPACE, startedAt: session.startedAt,
     turns: parsed.turns,
     lastUser: lastOfRole(parsed.chat, 'user'),
     lastAnswer: lastOfRole(parsed.chat, 'assistant'),

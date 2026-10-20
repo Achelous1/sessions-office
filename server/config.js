@@ -7,6 +7,12 @@ const PORT = Number(process.env.PORT) || 4545;
 const HOSTNAME = '127.0.0.1'; // local only: transcripts never leave this machine
 const SHOW_SDK = process.env.SHOW_SDK === '1'; // claude-mem observer etc. are hidden by default
 
+// Remote Control sessions on other PCs + claude.ai/code cloud sessions, read through the login of Claude Code.
+// REMOTE=0 turns it off; REMOTE_API_URL is only for tests against a mock server.
+const SHOW_REMOTE = process.env.REMOTE !== '0';
+const REMOTE_API_URL = process.env.REMOTE_API_URL || 'https://api.anthropic.com';
+const MAX_CLOUD_SESSIONS = Number(process.env.MAX_CLOUD_SESSIONS) || 24;
+
 const CLIENT_DIR = path.join(__dirname, '..', 'client');
 const OPENRIG_DAEMON_FILE = path.join(os.homedir(), '.openrig', 'daemon.json');
 
@@ -34,4 +40,4 @@ function claudeSources() {
 
 const SOURCES = claudeSources();
 
-module.exports = { PORT, HOSTNAME, SHOW_SDK, CLIENT_DIR, OPENRIG_DAEMON_FILE, SOURCES };
+module.exports = { PORT, HOSTNAME, SHOW_SDK, SHOW_REMOTE, REMOTE_API_URL, MAX_CLOUD_SESSIONS, CLIENT_DIR, OPENRIG_DAEMON_FILE, SOURCES };

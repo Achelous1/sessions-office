@@ -22,9 +22,10 @@ scene.add(hemiLight);
 export const sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
 sunLight.position.set(10, 30, 16);
 sunLight.castShadow = true;
-sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -40;
-sunLight.shadow.camera.right = sunLight.shadow.camera.top = 40;
-sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = sunLight.shadow.camera.bottom = -75; // wide enough for the remote offices too
+sunLight.shadow.camera.right = sunLight.shadow.camera.top = 75;
+sunLight.shadow.camera.far = 200;
+sunLight.shadow.mapSize.set(4096, 4096);
 scene.add(sunLight);
 
 function resize() {

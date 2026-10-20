@@ -3,7 +3,8 @@
 // the lounge east of the last walkway (x > 8). Rows are added as sessions arrive, so L changes with the head count.
 export const CELL = 11;
 export const WALKWAY_X = [-14, -3, 8];
-const DESKS_PER_POD = 4, PODS_PER_ROW = 2;
+export const DESKS_PER_POD = 4;
+const PODS_PER_ROW = 2;
 
 // LC: pantry door walkway, LX: glass partition, PX: west wall, RX: east wall; the rest is filled in by layout()
 export const L = { LC: -14, LX: -15.5, PX: -27, RX: 16 };
@@ -41,9 +42,11 @@ const toWalkway = (pod, p, dir) => Math.abs(dir.x) > .5
   ? { x: dir.x > 0 ? pod.xR : pod.xL, z: p.z, t: 'v' }
   : { x: p.x, z: dir.z > 0 ? pod.zB : pod.zT, t: 'h' };
 
-// Desk placement for the i-th session, with the routes from its seat (and the visitor's standing spot) to a walkway.
-export function deskSlot(i) {
-  const pod = podOf(Math.floor(i / DESKS_PER_POD)), k = i % DESKS_PER_POD;
+// Desk placement for the i-th local session, with the routes from its seat (and the visitor's standing spot) to a walkway.
+export const deskSlot = i => podDeskSlot(podOf(Math.floor(i / DESKS_PER_POD)), i % DESKS_PER_POD);
+
+// The k-th of the four desks in a pod (any office: pod = { cx, cz, rot, xL, xR, zT, zB }).
+export function podDeskSlot(pod, k) {
   const sideX = k % 2 ? 1.65 : -1.65, facing = k < 2 ? -1 : 1;
   const direction = (x, z) => toWorld({ ...pod, cx: 0, cz: 0 }, x, z);
   const outward = direction(0, facing), sideways = direction(Math.sign(sideX), 0);

@@ -28,6 +28,13 @@
 |---|---|
 | ![노트북 주변의 서브에이전트들](docs/media/subagents.png) | ![서브에이전트 애니메이션](docs/media/subagents.gif) |
 
+### 원격 PC · 클라우드 세션 (원격 사무실)
+Remote Control이 켜진 **다른 PC의 세션**과 **claude.ai/code 클라우드 세션**도 함께 보입니다. 자세한 내용은 아래 [원격 세션](#원격-세션) 항목을 참고하세요.
+- 원격 PC마다 본사 뒤쪽에 작은 별관 사무실이 생깁니다. 각 별관은 전선으로 커다란 위성 안테나와 연결되어 있고, 안테나는 좌우로 고개를 까딱거립니다.
+- 클라우드 세션은 본사 옆 하늘에 떠 있는 구름 사무실에서 일합니다.
+- 원격 세션을 해고하면 아카이브되고, 직원은 자리에서 스르륵 사라집니다.
+- `☰ 직원 목록`의 **사무실** 탭에서 로컬 / 원격 PC / 클라우드 사무실 목록을 보고, 클릭하면 그 사무실로 확대됩니다. `⤢ 전체 보기`는 모든 사무실을 한 화면에 담습니다.
+
 ### OpenRig 팀 시각화 (선택)
 [OpenRig](https://github.com/mvschwarz/openrig)로 여러 에이전트를 한 팀(rig)으로 돌리고 있다면, 같은 팀 세션들이 한 pod에 모여 앉고 누가 누구에게 일을 넘기는지가 책상 사이의 비행 경로로 그려집니다. 자세한 내용은 아래 [OpenRig 연동](#openrig-연동) 항목을 참고하세요.
 
@@ -77,6 +84,37 @@ node server         # 또는 npm start
 | `PORT` | `4545` | 서버 포트 (`PORT=5000 ./start.sh`) |
 | `SHOW_SDK` | (꺼짐) | `1`이면 SDK로 띄운 세션(claude-mem observer 등)도 표시 |
 | `NO_WSL` | (꺼짐) | Windows `start.cmd`에서 WSL 대신 Windows node로 실행 |
+| `REMOTE` | (켜짐) | `0`이면 원격 PC·클라우드 세션을 불러오지 않음 |
+| `MAX_CLOUD_SESSIONS` | `24` | 구름 사무실에 보여 줄 클라우드 세션 수 (최근 생성 순) |
+
+## 원격 세션
+
+Remote Control이 켜진 다른 PC의 세션과 claude.ai/code 클라우드 세션을 보여 줍니다. 따로 설정할 것은 없습니다. 이 PC에서 Claude Code에 로그인되어 있으면 자동으로 불러옵니다.
+
+> ⚠️ **비공식 API를 씁니다.** 세션 목록은 claude.ai 웹과 Remote Control이 쓰는 `api.anthropic.com/v1/code/sessions`에서 가져옵니다. 이 API는 공개 문서가 없어서, Anthropic이 바꾸면 예고 없이 동작하지 않을 수 있습니다. 그래도 로컬 사무실은 영향을 받지 않습니다. 원치 않으면 `REMOTE=0`으로 끄세요.
+
+### 어떤 세션이 어디에 앉나
+| 세션 | 표시 조건 | 사무실 |
+|---|---|---|
+| 다른 PC의 Remote Control 세션 | 아카이브되지 않았고 PC와 연결된 상태 | PC마다 별관 1개 (📡) |
+| 클라우드 세션 (claude.ai/code) | 아카이브되지 않은 세션 중 최근 `MAX_CLOUD_SESSIONS`개 | 구름 사무실 1개 (☁️) |
+| 이 PC의 세션 | — | 본사 (원격 목록에서는 빠짐) |
+
+- 원격 직원은 항상 자기 자리에 앉아 있습니다. 상태는 작업 중 / 답변 대기(`?`) / 휴식으로 표시되고, 매 턴 끝의 한 줄 요약이 말풍선으로 뜹니다.
+- 클릭하면 대화 내역 패널에 최근 대화가 열립니다.
+- **해고**하면 세션을 아카이브합니다. 원격 세션은 히스토리 탭에서 다시 열 수 없습니다.
+
+### 알려진 제한: 원격 PC 구분
+API의 세션 정보에는 "어느 PC인지"를 알려 주는 필드가 없습니다. 그래서 Remote Control이 자동으로 붙이는 제목(`<호스트명>-<단어>-<단어>`, 예: `mac-mini-local-happy-otter`)에서 호스트명을 읽습니다.
+- 첫 메시지 뒤에 제목이 바뀌어도 알아볼 수 있도록, 처음 본 호스트명을 `~/.session-office/remote-hosts.json`에 기억해 둡니다.
+- Session Office가 꺼져 있는 동안 시작해서 이미 제목이 바뀐 세션은 PC를 알 수 없어 **원격 PC (미확인)** 사무실로 갑니다.
+- 이 PC의 호스트명과 같은 세션은 본사에 이미 있으므로 원격 목록에서 뺍니다.
+
+### 로그인 정보
+- `~/.claude/.credentials.json`에서 Claude Code의 로그인 토큰을 읽습니다. macOS는 키체인(`Claude Code-credentials`)에서 읽습니다.
+- 조직 정보는 `~/.claude.json`에서 읽습니다.
+- 토큰은 `api.anthropic.com`에만 보냅니다. 만료된 토큰은 Claude Code를 한 번 실행하면 갱신됩니다.
+- 목록은 5초마다 백그라운드에서 갱신합니다. API가 느리거나 연결되지 않아도 로컬 사무실은 기다리지 않습니다.
 
 ## OpenRig 연동
 
@@ -107,7 +145,7 @@ Session Office는 이 데몬을 읽기만 합니다. OpenRig를 쓰지 않아도
 - 서버는 `~/.claude/sessions/*.json`에서 살아 있는 세션을 찾고, `~/.claude/projects/` 아래의 트랜스크립트(`.jsonl`)를 읽어 대화 내역과 상태를 만듭니다. WSL에서는 `/mnt/c/Users/*/.claude`도 함께 읽습니다.
 - 세션 파일의 PID와 프로세스 시작 시각을 대조해, PID가 재사용된 오래된 세션은 걸러 냅니다.
 - 서버는 **127.0.0.1에만 바인딩**되므로 다른 PC에서는 접속할 수 없습니다. 해고 API는 커스텀 헤더를 요구해, 다른 웹사이트가 브라우저를 통해 세션을 종료할 수 없게 막습니다.
-- 외부로 데이터를 보내지 않습니다. 접속하는 곳은 로컬 파일과 (있다면) 로컬 OpenRig 데몬뿐입니다. three.js와 marked는 `client/vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
+- 외부로는 원격 세션을 불러올 때 `api.anthropic.com`에만 접속합니다(`REMOTE=0`이면 이것도 하지 않음). 그 밖에는 로컬 파일과 (있다면) 로컬 OpenRig 데몬만 읽습니다. three.js와 marked는 `client/vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
 
 ## 구성
 
@@ -121,6 +159,8 @@ server/                Node.js HTTP 서버 (의존성 없음)
   transcripts.js       트랜스크립트(.jsonl) → 대화 내역·셸 활동 파싱 (변경 시에만 다시 읽음)
   sessions.js          살아 있는 세션 목록·요약, 서브에이전트, 히스토리와 복구 명령
   rigs.js              OpenRig 데몬 조회 (선택)
+  anthropic-api.js     claude.ai 세션 API 호출 (로그인 토큰 사용)
+  remote.js            원격 PC·클라우드 세션 → 세션 요약, PC별 사무실 구분, 아카이브
   static.js            client/ 정적 파일 제공 (폴더 밖 접근 차단)
   routes.js            API 라우팅
 client/                브라우저 (빌드 없이 ES 모듈 그대로 사용)
@@ -129,9 +169,10 @@ client/                브라우저 (빌드 없이 ES 모듈 그대로 사용)
   js/api.js            서버 API 호출
   js/sync.js           2초마다 폴링해 사무실 상태를 맞춤
   js/core/             three.js 엔진, 복셀 헬퍼, 낮/밤 테마, 화면 오버레이(이름표·말풍선)
-  js/world/            배치(layout), 사무실(room), 길찾기, 책상·직원, 방문자, OpenRig 연결선, 노트북 화면
+  js/world/            배치(layout), 사무실(room), 원격·구름 사무실(offices), 위성 안테나, 길찾기, 책상·직원,
+                       방문자, OpenRig 연결선, 노트북 화면
   js/characters/       사람, Clawd(서브에이전트), 물음표, 우는 효과
-  js/ui/               대화 패널, 직원 목록·히스토리, 카메라 이동, 클릭 선택, 마크다운
+  js/ui/               대화 패널, 사무실·직원 목록·히스토리, 카메라 이동, 클릭 선택, 마크다운
   vendor/              three.js, OrbitControls, marked v12.0.2
 test/                  서버 단위 테스트 (npm test)
 start.sh, start.cmd    실행 스크립트
@@ -141,11 +182,12 @@ docs/media/            README용 스크린샷·영상
 ### API
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| GET | `/api/sessions` | 살아 있는 세션 요약 목록 |
+| GET | `/api/sessions` | 살아 있는 세션 요약 목록 (로컬 + 원격 PC + 클라우드, 각각 `workspace` 포함) |
 | GET | `/api/session/:id` | 세션 하나와 최근 대화 300개 |
-| POST | `/api/session/:id/fire` | 세션 종료 (`x-office: 1` 헤더 필요) |
+| POST | `/api/session/:id/fire` | 로컬 세션 종료 / 원격 세션 아카이브 (`x-office: 1` 헤더 필요) |
 | GET | `/api/history` | 지난 세션과 복구 명령 |
 | GET | `/api/rigs` | OpenRig 팀과 위임 관계 |
+| GET | `/api/remote` | 원격 세션 표시 여부와 마지막 오류 |
 
 ### 테스트
 ```bash

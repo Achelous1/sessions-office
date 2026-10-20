@@ -3,7 +3,7 @@ import { fetchSession } from '../api.js';
 import { clip } from '../core/overlay.js';
 import { desks } from '../world/state.js';
 import { renderMarkdown } from './markdown.js';
-import { HOST_NAME, el } from './labels.js';
+import { placeOf, el } from './labels.js';
 
 const MIN_WIDTH = 320, MARGIN = 80, STICK_TO_BOTTOM_PX = 40;
 const WIDTH_KEY = 'panelWidth';
@@ -28,7 +28,7 @@ function renderHeader(s) {
   document.getElementById('p-title').textContent = s.title || s.name;
   const meta = document.getElementById('p-meta'), rig = desks.get(s.id)?.session.rig;
   meta.replaceChildren(statusChip(s.status));
-  meta.append(`${HOST_NAME[s.host] ?? ''}${rig ? ` · rig ${rig.name}/${rig.logicalId}` : ''} · 턴 ${s.turns} · ${s.name} · ${s.cwd}`);
+  meta.append([placeOf(s) + (rig ? ` · rig ${rig.name}/${rig.logicalId}` : ''), !s.remote && `턴 ${s.turns}`, s.name, s.cwd].filter(Boolean).join(' · '));
   if (s.subagents?.length) {
     meta.append(`\n서브에이전트 ${s.subagents.length}개 실행 중: ` + s.subagents.map(a => `${a.type} (${clip(a.description, 40)})`).join(', '));
   }

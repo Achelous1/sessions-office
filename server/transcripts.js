@@ -101,4 +101,17 @@ function parseTranscript(file) {
   return data;
 }
 
-module.exports = { findTranscript, parseTranscript, parseTranscriptText, toolHint };
+// Chat log from transcript-shaped entries ({ type, message, timestamp }), e.g. a remote session's events.
+function chatFromEntries(entries) {
+  const chat = [];
+  let turns = 0;
+  for (const entry of entries) {
+    if (entry.isSidechain || entry.isMeta || !entry.message) continue;
+    const messages = chatMessages(entry, turns);
+    if (entry.type === 'user' && messages.length) turns++;
+    chat.push(...messages);
+  }
+  return { chat, turns };
+}
+
+module.exports = { findTranscript, parseTranscript, parseTranscriptText, chatFromEntries, toolHint };
