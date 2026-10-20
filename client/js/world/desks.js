@@ -7,6 +7,7 @@ import { hangoutSpots } from './layout.js';
 import { desks, clickables } from './state.js';
 import { resolve, goTo, stepAgent } from './navigation.js';
 import { updateLaptopScreen } from './laptop-screen.js';
+import { buildCloudDesk } from './cloud-desk.js';
 import { CHAIR, HELD_ITEM, hash } from './palette.js';
 import { person, pose, sip } from '../characters/person.js';
 import { makeQuestionMark, updateQuestionMark } from '../characters/question-mark.js';
@@ -17,6 +18,7 @@ const ANSWER_BUBBLE_MS = 7000;
 const LEAVE_SPEED = 4.5, CRYING_SPEED = 2.6;
 const SITTING_ACTS = new Set(['sit', 'sofa', 'beanbag']);
 const FADE_MS = 1600;
+const BOB_HEIGHT = .18;
 
 const isRemote = session => (session.workspace?.kind ?? 'local') !== 'local';
 // A running shell or monitor means the session is still on the job: it waits at the desk instead of taking a break.
@@ -46,25 +48,35 @@ function forgetClickables(predicate) {
   for (let i = clickables.length - 1; i >= 0; i--) if (predicate(clickables[i])) clickables.splice(i, 1);
 }
 
-// desk with a laptop and a mug; the chair is on local +z
-function buildDesk(sessionId) {
-  const g = new THREE.Group(); scene.add(g);
-  vox(g, 0xa0764a, [3.2, .2, 1.6], [0, 1.1, 0]);
-  for (const [x, z] of [[-1.4, -.6], [1.4, -.6], [-1.4, .6], [1.4, .6]]) vox(g, 0x5a4030, [.2, 1.1, .2], [x, 0, z]);
-  vox(g, 0x5a4030, [3, .7, .1], [0, .4, -.7]); // modesty panel
+// the laptop is the same everywhere; its screen shows what the session is doing (see laptop-screen.js)
+function addLaptop(g) {
   vox(g, 0x3a3a3a, [1.2, .08, .8], [0, 1.3, .1]);
   const lid = new THREE.Group(); lid.position.set(0, 1.38, -.3); lid.rotation.x = -.25; g.add(lid);
   vox(lid, 0x3a3a3a, [1.2, .8, .06], [0, 0, 0]);
-  const screen = vox(lid, new THREE.MeshBasicMaterial({ color: 0x111111 }), [1.05, .65, .02], [0, .07, .04]);
+  return vox(lid, new THREE.MeshBasicMaterial({ color: 0x111111 }), [1.05, .65, .02], [0, .07, .04]);
+}
+
+// wooden desk with a laptop and a mug; the chair is on local +z
+function buildWoodenDesk(g, sessionId) {
+  vox(g, 0xa0764a, [3.2, .2, 1.6], [0, 1.1, 0]);
+  for (const [x, z] of [[-1.4, -.6], [1.4, -.6], [-1.4, .6], [1.4, .6]]) vox(g, 0x5a4030, [.2, 1.1, .2], [x, 0, z]);
+  vox(g, 0x5a4030, [3, .7, .1], [0, .4, -.7]); // modesty panel
   vox(g, 0xffffff, [.25, .3, .25], [1.1, 1.3, .3]); // mug
   const chair = CHAIR[hash(sessionId) % CHAIR.length];
   vox(g, chair, [1, .2, 1], [0, .3, 1.6]); vox(g, chair, [1, 1.1, .2], [0, .5, 2.1]); vox(g, 0x555555, [.2, .3, .2], [0, 0, 1.6]);
-  return { group: g, screen };
+}
+
+// cloud sessions sit on their own cloud, at a cloud desk on a cloud chair
+function buildDesk(session) {
+  const group = new THREE.Group(); scene.add(group);
+  if (session.workspace?.kind === 'cloud') buildCloudDesk(group);
+  else buildWoodenDesk(group, session.id);
+  return { group, screen: addLaptop(group) };
 }
 
 // A new local session walks in from the door; ones already running on page load, and remote ones, start in place.
 export function createDesk(session, slot, walkInFromDoor) {
-  const { group, screen } = buildDesk(session.id);
+  const { group, screen } = buildDesk(session);
   markClickable(group, session.id);
   const obj = person(session.id); scene.add(obj); markClickable(obj, session.id);
   const worker = { obj, loc: { kind: 'entry' }, path: [], phase: hash(session.id) % 1000 };
@@ -182,8 +194,17 @@ function stepWorker(desk, dt, now) {
   if (desk.bubbleUntil > now) u.head.rotation.y = Math.sin(now / 200) * .3; // talking
 }
 
+// cloud desks drift up and down a little, each at its own pace, carrying their worker along
+function bob(desk, now) {
+  if (desk.session.workspace?.kind !== 'cloud' || desk.fading) return;
+  const y = (desk.slot.y ?? 0) + Math.sin(now / 1400 + desk.worker.phase) * BOB_HEIGHT;
+  desk.group.position.y = y;
+  desk.worker.obj.userData.baseY = y;
+}
+
 export function stepDesks(dt, now) {
   for (const desk of desks.values()) {
+    bob(desk, now);
     updateLaptopScreen(desk, now);
     stepWorker(desk, dt, now);
     if (desk.bubbleUntil <= now) desk.bubble.style.opacity = 0;

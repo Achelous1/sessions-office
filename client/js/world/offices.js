@@ -13,20 +13,17 @@ import { makeSatelliteDish, animateDish, layCable } from './satellite-dish.js';
 export const OFFICE_SPACING = 600; // > camera far plane + max zoom distance + office size
 const DISH_SPACE = 11;
 const ANNEX_WALL = 1.2;
-const CLOUD_Y = 13, CLOUD_PODS_PER_ROW = 2;
+const CLOUD_Y = 13, CLOUD_COLUMNS = 4, CLOUD_GAP_X = 7, CLOUD_GAP_Z = 7.5;
 
-// lit a little from within, so the shaded sides stay white instead of turning grey
-const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x8a93a3 });
-
-const offices = new Map(); // workspace id -> { id, kind, name, pods, bounds: { minX, maxX, minZ, maxZ, y }, view, sign, anchor }
+const offices = new Map(); // workspace id -> { id, kind, name, pods (annexes), bounds: { minX, maxX, minZ, maxZ, y }, view, sign, anchor }
 let group = null, dishes = [], builtKey = '';
 
 const podAt = (x, z) => ({ cx: x + CELL / 2, cz: z + CELL / 2, rot: 0, xL: x, xR: x + CELL, zT: z, zB: z + CELL });
 const podCount = n => Math.max(1, Math.ceil(n / DESKS_PER_POD));
 
 // ---------- building ----------
-function podFurniture(pod, y, index) {
-  const g = new THREE.Group(); g.position.set(pod.cx, y, pod.cz); group.add(g);
+function podFurniture(pod, index) {
+  const g = new THREE.Group(); g.position.set(pod.cx, 0, pod.cz); group.add(g);
   vox(g, 0x7a9a7e, [6.6, .7, .12], [0, 1.3, 0]); // divider between facing desks
   vox(g, POD_RUG[index % POD_RUG.length], [7.6, .03, 7.6], [0, 0, 0]);
 }
@@ -45,7 +42,7 @@ function buildAnnex(office) {
   vox(group, WALL, [.3, ANNEX_WALL, d], [minX - .15, 0, cz]);
   vox(group, WALL, [.3, ANNEX_WALL, d], [maxX + .15, 0, cz]);
   for (const [x0, x1] of [[minX, cx - 1.6], [cx + 1.6, maxX]]) vox(group, WALL, [x1 - x0, ANNEX_WALL, .3], [(x0 + x1) / 2, 0, maxZ + .15]); // doorway in front
-  office.pods.forEach((pod, i) => podFurniture(pod, 0, i));
+  office.pods.forEach(podFurniture);
   // the dish stands east of the annex; the cable leaves through the east wall
   const dishX = maxX + DISH_SPACE / 2 + 1;
   dishes.push(makeSatelliteDish(group, dishX, cz - 2, 0));
@@ -53,28 +50,21 @@ function buildAnnex(office) {
   officeSign(office, cx, ANNEX_WALL + 3.5, maxZ);
 }
 
-// a puff is a small stack of boxes, wide at the bottom and rounder on top
-function puff(x, y, z, size) {
-  vox(group, cloudMat, [size, size * .45, size * .8], [x, y, z]);
-  vox(group, cloudMat, [size * .8, size * .45, size], [x, y, z]);
-  vox(group, cloudMat, [size * .6, size * .35, size * .6], [x, y + size * .45, z]);
+// Cloud sessions each float on their own cloud (see cloud-desk.js); the office is just where those clouds gather.
+function cloudSeat(office, i) {
+  const { minX, minZ } = office.bounds, col = i % CLOUD_COLUMNS, row = Math.floor(i / CLOUD_COLUMNS);
+  const x = minX + CLOUD_GAP_X / 2 + col * CLOUD_GAP_X + (row % 2) * CLOUD_GAP_X / 3; // staggered rows
+  const z = minZ + 2 + row * CLOUD_GAP_Z + Math.sin(i * 2.3) * .8;                   // a little scattered
+  return {
+    desk: { x, z }, deskRot: 0, y: office.bounds.y,
+    seat: { pos: { x, z: z + 1.5 }, yaw: Math.PI, net: [] },
+    visit: { pos: { x: x + 2.2, z: z + .5 }, yaw: -Math.PI / 2, net: [] },
+  };
 }
 
-// a white floor slab on a bed of cloud puffs, with a fluffy rim poking up around the edge
-function buildCloud(office) {
-  const { minX, maxX, minZ, maxZ, y } = office.bounds, w = maxX - minX, d = maxZ - minZ;
-  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, floorTop = y, below = y - .4;
-  vox(group, 0xf7faff, [w, .4, d], [cx, below, cz]);
-  const lump = (x, z) => Math.sin(x * 1.7 + z * .9) * .5 + .5; // deterministic, so rebuilds look the same
-  for (let x = minX + 1.5; x < maxX; x += 3.2) for (let z = minZ + 1.5; z < maxZ; z += 3.2) {
-    const s = 3.2 + lump(x, z) * 1.6;
-    puff(x, below - s * .8, z, s); // underneath: tops stay below the floor
-  }
-  const rim = (x, z) => puff(x, floorTop - .9 - lump(x, z) * .4, z, 2 + lump(z, x) * 1.2);
-  for (let x = minX; x <= maxX; x += 2.2) { rim(x, minZ - .6); rim(x, maxZ + .6); }
-  for (let z = minZ + 2; z < maxZ - 1; z += 2.2) { rim(minX - .6, z); rim(maxX + .6, z); }
-  office.pods.forEach((pod, i) => podFurniture(pod, y, i));
-  officeSign(office, cx, y + 4.5, maxZ);
+function buildCloudOffice(office) {
+  const { minX, maxX, minZ } = office.bounds;
+  officeSign(office, (minX + maxX) / 2, office.bounds.y + 5, minZ);
 }
 
 function clear() {
@@ -89,38 +79,41 @@ function clear() {
 // workspaces: [{ workspace: { id, kind, name }, count }] for every non-local workspace with sessions.
 // Rebuilds only when an office appears, disappears, grows or shrinks, or the main office moved.
 // An office of `pods` pods in a grid `cols` wide, centered on (cx, cz).
-function officeGrid(cx, cz, y, pods, cols) {
+function officeGrid(cx, cz, pods, cols) {
   const rows = Math.ceil(pods / cols), minX = cx - (cols * CELL + 2) / 2, minZ = cz - (rows * CELL + 2) / 2;
   const podList = Array.from({ length: pods }, (_, p) => podAt(minX + 1 + (p % cols) * CELL, minZ + 1 + Math.floor(p / cols) * CELL));
-  return { pods: podList, bounds: { minX, maxX: minX + cols * CELL + 2, minZ, maxZ: minZ + rows * CELL + 2, y } };
+  return { pods: podList, bounds: { minX, maxX: minX + cols * CELL + 2, minZ, maxZ: minZ + rows * CELL + 2, y: 0 } };
 }
 
 // workspaces: [{ workspace: { id, kind, name }, count }] for every non-local workspace with sessions.
 // Remote PCs line up east of the main office, the cloud sits north; each OFFICE_SPACING apart.
 // Rebuilds only when an office appears, disappears, grows or shrinks.
 export function arrangeOffices(workspaces) {
-  const key = JSON.stringify(workspaces.map(w => [w.workspace.id, w.workspace.name, podCount(w.count)]));
+  const key = JSON.stringify(workspaces.map(w => [w.workspace.id, w.workspace.name, w.workspace.kind === 'cloud' ? w.count : podCount(w.count)]));
   if (key === builtKey) return;
   builtKey = key;
   clear();
   workspaces.filter(w => w.workspace.kind === 'remote').forEach(({ workspace, count }, k) => {
-    const pods = podCount(count), { pods: podList, bounds } = officeGrid(OFFICE_SPACING * (k + 1), 0, 0, pods, pods);
+    const pods = podCount(count), { pods: podList, bounds } = officeGrid(OFFICE_SPACING * (k + 1), 0, pods, pods);
     const office = { ...workspace, pods: podList, bounds, view: { ...bounds, maxX: bounds.maxX + DISH_SPACE + 1 } }; // view includes the dish
     offices.set(workspace.id, office);
     buildAnnex(office);
   });
   const cloud = workspaces.find(w => w.workspace.kind === 'cloud');
   if (cloud) {
-    const pods = podCount(cloud.count), { pods: podList, bounds } = officeGrid(0, -OFFICE_SPACING, CLOUD_Y, pods, Math.min(pods, CLOUD_PODS_PER_ROW));
-    const office = { ...cloud.workspace, pods: podList, bounds, view: bounds };
+    const cols = Math.min(cloud.count, CLOUD_COLUMNS), rows = Math.ceil(cloud.count / CLOUD_COLUMNS);
+    const width = (cols + .4) * CLOUD_GAP_X, depth = rows * CLOUD_GAP_Z + 2;
+    const bounds = { minX: -width / 2, maxX: width / 2, minZ: -OFFICE_SPACING - depth / 2, maxZ: -OFFICE_SPACING + depth / 2, y: CLOUD_Y };
+    const office = { ...cloud.workspace, bounds, view: bounds };
     offices.set(cloud.workspace.id, office);
-    buildCloud(office);
+    buildCloudOffice(office);
   }
 }
 
-// Desk placement for the i-th session of a workspace; y lifts it onto the cloud.
+// Desk placement for the i-th session of a workspace; y lifts cloud desks into the sky.
 export function officeSlot(workspaceId, i) {
   const office = offices.get(workspaceId);
+  if (office.kind === 'cloud') return cloudSeat(office, i);
   const slot = podDeskSlot(office.pods[Math.floor(i / DESKS_PER_POD)], i % DESKS_PER_POD);
   return { ...slot, y: office.bounds.y };
 }
