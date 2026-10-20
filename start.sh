@@ -21,7 +21,7 @@ if curl -s -o /dev/null "$URL/api/sessions" 2>/dev/null; then
   exit 0
 fi
 
-PORT="$PORT" node server.js &
+PORT="$PORT" node server &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null' INT TERM
 for _ in $(seq 20); do curl -s -o /dev/null "$URL/api/sessions" && break; sleep 0.25; done

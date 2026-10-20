@@ -67,7 +67,7 @@ cd sessions-office
 
 ### 직접 실행
 ```bash
-node server.js     # 또는 npm start
+node server         # 또는 npm start
 ```
 그다음 브라우저에서 http://localhost:4545 를 엽니다.
 
@@ -107,19 +107,51 @@ Session Office는 이 데몬을 읽기만 합니다. OpenRig를 쓰지 않아도
 - 서버는 `~/.claude/sessions/*.json`에서 살아 있는 세션을 찾고, `~/.claude/projects/` 아래의 트랜스크립트(`.jsonl`)를 읽어 대화 내역과 상태를 만듭니다. WSL에서는 `/mnt/c/Users/*/.claude`도 함께 읽습니다.
 - 세션 파일의 PID와 프로세스 시작 시각을 대조해, PID가 재사용된 오래된 세션은 걸러 냅니다.
 - 서버는 **127.0.0.1에만 바인딩**되므로 다른 PC에서는 접속할 수 없습니다. 해고 API는 커스텀 헤더를 요구해, 다른 웹사이트가 브라우저를 통해 세션을 종료할 수 없게 막습니다.
-- 외부로 데이터를 보내지 않습니다. 접속하는 곳은 로컬 파일과 (있다면) 로컬 OpenRig 데몬뿐입니다. three.js와 marked는 `vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
+- 외부로 데이터를 보내지 않습니다. 접속하는 곳은 로컬 파일과 (있다면) 로컬 OpenRig 데몬뿐입니다. three.js와 marked는 `client/vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
 
 ## 구성
 
+서버와 클라이언트로 나뉘어 있습니다. 서버는 로컬 파일을 읽어 JSON API를 제공하고, 클라이언트는 그 API만 보고 화면을 그립니다.
+
 ```
-server.js     세션·트랜스크립트를 읽는 HTTP 서버 (의존성 없음)
-index.html    three.js 기반 화면과 UI
-start.sh      macOS / Linux / WSL 실행 스크립트
-start.cmd     Windows 실행 스크립트
-vendor/       three.js, OrbitControls, marked v12.0.2
-docs/media/   README용 스크린샷·영상
+server/                Node.js HTTP 서버 (의존성 없음)
+  index.js             진입점: 서버 생성·실행
+  config.js            포트, 읽을 ~/.claude 위치(WSL이면 Windows 쪽 포함)
+  processes.js         세션 프로세스 생존 확인(PID 재사용 검사)과 종료
+  transcripts.js       트랜스크립트(.jsonl) → 대화 내역·셸 활동 파싱 (변경 시에만 다시 읽음)
+  sessions.js          살아 있는 세션 목록·요약, 서브에이전트, 히스토리와 복구 명령
+  rigs.js              OpenRig 데몬 조회 (선택)
+  static.js            client/ 정적 파일 제공 (폴더 밖 접근 차단)
+  routes.js            API 라우팅
+client/                브라우저 (빌드 없이 ES 모듈 그대로 사용)
+  index.html, styles.css
+  js/main.js           진입점: 초기화와 렌더 루프
+  js/api.js            서버 API 호출
+  js/sync.js           2초마다 폴링해 사무실 상태를 맞춤
+  js/core/             three.js 엔진, 복셀 헬퍼, 낮/밤 테마, 화면 오버레이(이름표·말풍선)
+  js/world/            배치(layout), 사무실(room), 길찾기, 책상·직원, 방문자, OpenRig 연결선, 노트북 화면
+  js/characters/       사람, Clawd(서브에이전트), 물음표, 우는 효과
+  js/ui/               대화 패널, 직원 목록·히스토리, 카메라 이동, 클릭 선택, 마크다운
+  vendor/              three.js, OrbitControls, marked v12.0.2
+test/                  서버 단위 테스트 (npm test)
+start.sh, start.cmd    실행 스크립트
+docs/media/            README용 스크린샷·영상
+```
+
+### API
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/sessions` | 살아 있는 세션 요약 목록 |
+| GET | `/api/session/:id` | 세션 하나와 최근 대화 300개 |
+| POST | `/api/session/:id/fire` | 세션 종료 (`x-office: 1` 헤더 필요) |
+| GET | `/api/history` | 지난 세션과 복구 명령 |
+| GET | `/api/rigs` | OpenRig 팀과 위임 관계 |
+
+### 테스트
+```bash
+npm test
 ```
 
 ## 라이선스
 
-[The Unlicense](LICENSE) — 퍼블릭 도메인. 상업적 이용을 포함해 누구나 조건 없이 자유롭게 사용·수정·배포할 수 있습니다. 단, `vendor/`의 서드파티 파일은 각 파일에 명시된 MIT 라이선스를 따릅니다.
+[The Unlicense](LICENSE) — 퍼블릭 도메인. 상업적 이용을 포함해 누구나 조건 없이 자유롭게 사용·수정·배포할 수 있습니다. 단, `client/vendor/`의 서드파티 파일은 각 파일에 명시된 MIT 라이선스를 따릅니다.

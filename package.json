@@ -4,9 +4,10 @@
   "private": true,
   "license": "Unlicense",
   "description": "Voxel office that shows live Claude Code sessions",
-  "main": "server.js",
+  "main": "server/index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

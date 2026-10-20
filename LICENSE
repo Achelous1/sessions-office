@@ -25,6 +25,6 @@ For more information, please refer to <https://unlicense.org>
 
 ---
 
-Bundled third-party files under vendor/ keep their own MIT licenses
+Bundled third-party files under client/vendor/ keep their own MIT licenses
 (three.js and OrbitControls: Copyright 2010-2023 Three.js Authors;
 marked: Copyright 2011-2024 Christopher Jeffrey), as stated in each file.

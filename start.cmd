@@ -33,4 +33,4 @@ curl -s -o nul "%URL%/api/sessions" && (
 rem open the browser once the server answers, while node runs in this window
 start "" /b powershell -NoProfile -Command "for ($i=0; $i -lt 40; $i++) { try { Invoke-WebRequest -UseBasicParsing '%URL%/api/sessions' | Out-Null; break } catch { Start-Sleep -Milliseconds 250 } }; Start-Process '%URL%'"
 echo Session Office: %URL%  (종료: Ctrl+C 또는 창 닫기)
-node server.js
+node server
