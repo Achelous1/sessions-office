@@ -34,11 +34,22 @@ function readKeychain() {
   });
 }
 
+const CREDENTIALS_FILE = path.join(os.homedir(), '.claude', '.credentials.json');
+const hasLogin = stored => !!stored?.claudeAiOauth?.accessToken;
+// what a credentials store holds, by key name only (never values), to explain a missing login
+const describe = (where, stored) => `${where}: ${stored ? `항목 [${Object.keys(stored).join(', ') || '없음'}]` : '없음'}`;
+
+// The file wins when it holds a claude.ai login; on macOS the keychain is checked too, since the file may only
+// carry other logins (MCP servers etc.) while the claude.ai one lives in the keychain.
 async function readCredentials() {
-  const file = readJson(path.join(os.homedir(), '.claude', '.credentials.json'));
-  if (file) return file;
-  if (process.platform !== 'darwin') throw new Error('Claude Code 로그인 정보를 찾지 못했습니다 (~/.claude/.credentials.json)');
-  return readKeychain();
+  const file = readJson(CREDENTIALS_FILE);
+  if (hasLogin(file) || process.platform !== 'darwin') {
+    if (hasLogin(file)) return file;
+    throw new Error(`claude.ai 계정 로그인 정보가 없습니다 (${describe('~/.claude/.credentials.json', file)})`);
+  }
+  const keychain = await readKeychain();
+  if (hasLogin(keychain)) return keychain;
+  throw new Error(`claude.ai 계정 로그인 정보가 없습니다 (${describe('키체인', keychain)} / ${describe('~/.claude/.credentials.json', file)}). API 키로 로그인했다면 원격 세션을 볼 수 없습니다`);
 }
 
 // One read at a time, remembered for a minute (failures too, so a denied dialog doesn't pop up every poll).
@@ -61,9 +72,8 @@ async function credentials() {
 async function loadLogin() {
   const orgFromConfig = () => readJson(path.join(os.homedir(), '.claude.json'))?.oauthAccount?.organizationUuid;
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return { token: process.env.CLAUDE_CODE_OAUTH_TOKEN, orgId: orgFromConfig() };
-  const stored = await credentials();
-  const oauth = stored?.claudeAiOauth;
-  if (!oauth?.accessToken) throw new Error('claude.ai 계정 로그인 정보가 없습니다 (API 키로 로그인한 경우 원격 세션을 볼 수 없습니다)');
+  const stored = await credentials(); // throws unless it holds a claude.ai login
+  const oauth = stored.claudeAiOauth;
   if (oauth.expiresAt && oauth.expiresAt < Date.now()) {
     credentialsCache.at = 0; // Claude Code may have refreshed it by the next poll
     throw new Error('로그인 토큰이 만료되었습니다. Claude Code를 한 번 실행하면 갱신됩니다');
