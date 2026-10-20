@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
-const { parseTranscriptText, toolHint } = require('../server/transcripts');
+const { parseTranscriptText, activityOf, toolHint } = require('../server/transcripts');
 const { resumeCommand } = require('../server/sessions');
 const { resolveClientFile } = require('../server/static');
 const { toRig } = require('../server/rigs');
@@ -84,4 +84,18 @@ test('OpenRig graph becomes members and delegation edges', () => {
 test('Windows process list parses pid -> start time', () => {
   const map = parseWindowsProcesses('123,1000\r\n\n456,2000\nbroken\n');
   assert.deepEqual([...map], [[123, '1000'], [456, '2000']]);
+});
+
+test('activity: running shells, unfinished subagents, last tool and prompt', () => {
+  const a = activityOf([
+    user('run the tests'),
+    assistant([{ type: 'tool_use', id: 'sh', name: 'Bash', input: { description: 'run tests' } }]),
+    assistant([{ type: 'tool_use', id: 'ag1', name: 'Agent', input: { subagent_type: 'Explore', description: 'find callers' } }]),
+    assistant([{ type: 'tool_use', id: 'ag2', name: 'Task', input: { description: 'done already' } }]),
+    user([{ type: 'tool_result', tool_use_id: 'ag2', content: 'ok' }]),
+  ]);
+  assert.equal(a.shell, 1);
+  assert.deepEqual(a.subagents, [{ type: 'Explore', description: 'find callers' }]);
+  assert.equal(a.lastTool.text, 'Task: done already');
+  assert.equal(a.lastUser.text, 'run the tests');
 });

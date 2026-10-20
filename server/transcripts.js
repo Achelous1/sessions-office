@@ -114,4 +114,30 @@ function chatFromEntries(entries) {
   return { chat, turns };
 }
 
-module.exports = { findTranscript, parseTranscript, parseTranscriptText, chatFromEntries, toolHint };
+const AGENT_TOOLS = new Set(['Agent', 'Task']);
+
+// What a session is doing right now, from its latest entries (oldest first): running shells, subagents whose
+// tool call hasn't returned yet, and the last tool / prompt. Used for remote sessions, whose events are entries.
+function activityOf(entries) {
+  const shell = new ShellTracker(), agents = new Map();
+  for (const entry of entries) {
+    shell.readRawLine(JSON.stringify(entry));
+    shell.readEntry(entry);
+    if (entry.isSidechain || !Array.isArray(entry.message?.content)) continue;
+    for (const block of entry.message.content) {
+      if (block.type === 'tool_use' && AGENT_TOOLS.has(block.name)) {
+        agents.set(block.id, { type: block.input?.subagent_type ?? 'agent', description: block.input?.description ?? '' });
+      }
+      if (block.type === 'tool_result') agents.delete(block.tool_use_id);
+    }
+  }
+  const { chat } = chatFromEntries(entries);
+  return {
+    shell: shell.count,
+    subagents: [...agents.values()],
+    lastTool: chat.findLast(m => m.role === 'tool') ?? null,
+    lastUser: chat.findLast(m => m.role === 'user') ?? null,
+  };
+}
+
+module.exports = { findTranscript, parseTranscript, parseTranscriptText, chatFromEntries, activityOf, toolHint };

@@ -4,12 +4,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const api = require('./anthropic-api');
-const { chatFromEntries } = require('./transcripts');
+const { chatFromEntries, activityOf } = require('./transcripts');
 const { SHOW_REMOTE, MAX_CLOUD_SESSIONS } = require('./config');
 
 const PAGE_SIZE = 50, MAX_PAGES = 4;
 const CACHE_MS = 5000;
 const CHAT_LIMIT = 300;
+// What busy remote sessions are doing (shells, subagents, last tool) costs one events request per session,
+// so it is only fetched for sessions that are working, every ACTIVITY_MS, a few at a time.
+const ACTIVITY_MS = 15000, ACTIVITY_EVENTS = 100, ACTIVITY_CONCURRENCY = 4;
 const HOSTS_FILE = path.join(os.homedir(), '.session-office', 'remote-hosts.json');
 
 const CLOUD = { id: 'cloud', kind: 'cloud', name: '클라우드' };
@@ -106,12 +109,46 @@ async function refresh() {
   Object.assign(cache, { at: Date.now(), refreshing: null });
 }
 
+// ---------- activity of busy sessions ----------
+const activity = new Map(); // session id -> { at, shell, subagents, lastTool, lastUser }
+let activityRefreshing = null;
+
+async function refreshActivity(sessions) {
+  const queue = [...sessions];
+  const worker = async () => {
+    for (let s = queue.shift(); s; s = queue.shift()) {
+      try {
+        const events = (await api.listEvents(s.id, ACTIVITY_EVENTS)).data ?? [];
+        activity.set(s.id, { at: Date.now(), ...activityOf(entriesOfEvents(events)) });
+      } catch {
+        activity.set(s.id, { ...activity.get(s.id), at: Date.now() }); // keep the last known, retry later
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: ACTIVITY_CONCURRENCY }, worker));
+  activityRefreshing = null;
+}
+
+function updateActivity(sessions) {
+  const busy = sessions.filter(s => s.status === 'busy');
+  const busyIds = new Set(busy.map(s => s.id));
+  for (const id of activity.keys()) if (!busyIds.has(id)) activity.delete(id); // idle again: nothing running
+  const stale = busy.filter(s => Date.now() - (activity.get(s.id)?.at ?? 0) >= ACTIVITY_MS);
+  if (stale.length) activityRefreshing ??= refreshActivity(stale);
+}
+
+const withActivity = s => {
+  const { at, ...known } = activity.get(s.id) ?? {};
+  return at ? { ...s, ...known } : s;
+};
+
 // Never waits on the network: returns the last list and refreshes it in the background, so a slow or
 // unreachable API can't hold up the local office. Remote sessions show up from the second poll on.
 function listRemoteSessions() {
   if (!SHOW_REMOTE) return [];
   if (Date.now() - cache.at >= CACHE_MS) cache.refreshing ??= refresh();
-  return cache.data;
+  updateActivity(cache.data);
+  return cache.data.map(withActivity);
 }
 
 const remoteStatus = () => ({ enabled: SHOW_REMOTE, error: cache.error });
@@ -120,18 +157,17 @@ const isRemoteId = id => cache.data.some(s => s.id === id);
 
 // ---------- one session ----------
 // Events (newest first) wrap transcript-like payloads: { payload: { type: 'user' | 'assistant', message }, created_at }
-function chatOfEvents(events) {
-  const entries = [...events].reverse()
-    .map(e => ({ ...(e.payload ?? e), timestamp: e.payload?.timestamp ?? e.created_at }))
-    .filter(entry => entry.type === 'user' || entry.type === 'assistant');
-  return chatFromEntries(entries).chat;
-}
+const entriesOfEvents = events => [...events].reverse()
+  .map(e => ({ ...(e.payload ?? e), timestamp: e.payload?.timestamp ?? e.created_at }))
+  .filter(entry => entry.type === 'user' || entry.type === 'assistant');
+
+const chatOfEvents = events => chatFromEntries(entriesOfEvents(events)).chat;
 
 async function remoteSessionDetail(id) {
   const listed = cache.data.find(s => s.id === id);
   if (!listed) return null;
   const events = (await api.listEvents(id, CHAT_LIMIT)).data ?? [];
-  return { ...listed, chat: chatOfEvents(events) };
+  return { ...withActivity(listed), chat: chatOfEvents(events) };
 }
 
 async function archiveRemoteSession(id) {
