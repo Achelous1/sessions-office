@@ -35,9 +35,17 @@ function readKeychain() {
 }
 
 const CREDENTIALS_FILE = path.join(os.homedir(), '.claude', '.credentials.json');
-const hasLogin = stored => !!stored?.claudeAiOauth?.accessToken;
-// what a credentials store holds, by key name only (never values), to explain a missing login
-const describe = (where, stored) => `${where}: ${stored ? `항목 [${Object.keys(stored).join(', ') || '없음'}]` : '없음'}`;
+const accessTokenOf = oauth => oauth?.accessToken ?? oauth?.access_token;
+const hasLogin = stored => !!accessTokenOf(stored?.claudeAiOauth);
+
+// What a credentials store holds, by key name and value type only (never values), to explain a missing login:
+// "항목 [claudeAiOauth{refreshToken, expiresAt}]"
+function describe(where, stored) {
+  if (!stored) return `${where}: 없음`;
+  const keys = Object.entries(stored).map(([key, value]) =>
+    value && typeof value === 'object' ? `${key}{${Object.keys(value).join(', ')}}` : `${key}(${value === null ? 'null' : typeof value})`);
+  return `${where}: 항목 [${keys.join(', ') || '없음'}]`;
+}
 
 // The file wins when it holds a claude.ai login; on macOS the keychain is checked too, since the file may only
 // carry other logins (MCP servers etc.) while the claude.ai one lives in the keychain.
@@ -78,7 +86,7 @@ async function loadLogin() {
     credentialsCache.at = 0; // Claude Code may have refreshed it by the next poll
     throw new Error('로그인 토큰이 만료되었습니다. Claude Code를 한 번 실행하면 갱신됩니다');
   }
-  return { token: oauth.accessToken, orgId: orgFromConfig() ?? stored.organizationUuid };
+  return { token: accessTokenOf(oauth), orgId: orgFromConfig() ?? stored.organizationUuid };
 }
 
 async function request(method, urlPath, body) {
