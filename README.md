@@ -20,3 +20,7 @@ Windows에서는 `start.cmd`를 더블클릭합니다(WSL에 node가 있으면 W
 - `vendor/` — three.js, OrbitControls, marked(v12.0.2) 번들 사본
 
 환경 변수: `PORT`(기본 4545), `SHOW_SDK=1`(SDK 세션 표시)
+
+## 라이선스
+
+[The Unlicense](LICENSE) — 퍼블릭 도메인. 상업적 이용을 포함해 누구나 조건 없이 자유롭게 사용·수정·배포할 수 있습니다. 단, `vendor/`의 서드파티 파일은 각 파일에 명시된 MIT 라이선스를 따릅니다.
