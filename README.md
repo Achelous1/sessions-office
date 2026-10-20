@@ -28,8 +28,8 @@
 |---|---|
 | ![노트북 주변의 서브에이전트들](docs/media/subagents.png) | ![서브에이전트 애니메이션](docs/media/subagents.gif) |
 
-### OpenRig 연동 (선택)
-OpenRig 데몬이 실행 중이면(`~/.openrig/daemon.json`), 같은 리그에 속한 세션들이 같은 pod에 모여 앉고, 위임 관계가 책상 사이의 비행 경로 곡선과 그 위를 나는 작은 복셀 비행기로 표시됩니다. OpenRig가 없으면 이 기능은 그냥 꺼져 있습니다.
+### OpenRig 팀 시각화 (선택)
+[OpenRig](https://github.com/mvschwarz/openrig)로 여러 에이전트를 한 팀(rig)으로 돌리고 있다면, 같은 팀 세션들이 한 pod에 모여 앉고 누가 누구에게 일을 넘기는지가 책상 사이의 비행 경로로 그려집니다. 자세한 내용은 아래 [OpenRig 연동](#openrig-연동) 항목을 참고하세요.
 
 ![OpenRig 위임 관계 표시](docs/media/openrig-links.png)
 
@@ -78,12 +78,36 @@ node server.js     # 또는 npm start
 | `SHOW_SDK` | (꺼짐) | `1`이면 SDK로 띄운 세션(claude-mem observer 등)도 표시 |
 | `NO_WSL` | (꺼짐) | Windows `start.cmd`에서 WSL 대신 Windows node로 실행 |
 
+## OpenRig 연동
+
+[OpenRig](https://github.com/mvschwarz/openrig)는 Claude Code와 Codex 세션 여러 개를 하나의 팀(**rig**)으로 묶어 실행하는 오픈소스 멀티 에이전트 하네스입니다. 팀 구성을 YAML로 적어 두면 한 번에 띄울 수 있고, 로컬 데몬이 각 세션과 세션 사이의 관계(토폴로지)를 관리합니다.
+Session Office는 이 데몬을 읽기만 합니다. OpenRig를 쓰지 않아도 다른 기능은 모두 그대로 동작합니다.
+
+### 켜는 방법
+따로 설정할 것은 없습니다. OpenRig 데몬이 실행 중이면 자동으로 연결됩니다.
+1. OpenRig로 rig를 띄웁니다(설치와 사용법은 [OpenRig 저장소](https://github.com/mvschwarz/openrig)를 참고하세요).
+2. Session Office를 실행합니다. 이미 실행 중이면 10초 안에 반영됩니다.
+
+### 화면에 보이는 것
+| 표시 | 의미 |
+|---|---|
+| 같은 pod에 모여 앉은 직원들 | 같은 rig에 속한 세션. rig 멤버가 먼저, rig 안의 순서대로 자리를 잡습니다 |
+| 책상 사이의 흰 곡선 + 날아가는 복셀 비행기 | rig 그래프의 연결(edge). 비행기는 보내는 쪽에서 받는 쪽으로 날아갑니다. 멀리 떨어진 책상일수록 곡선이 높게 뜹니다 |
+| 대화 패널 상단의 `rig <이름>/<logicalId>` | 이 세션이 속한 rig와 그 안에서의 역할 ID |
+| 휴식 중이어도 자리에 앉아 있음 | rig 멤버는 대기 중에도 탕비실로 가지 않고 자리를 지킵니다 |
+
+### 동작 원리
+- 서버가 `~/.openrig/daemon.json`에서 데몬 포트를 읽고, `http://127.0.0.1:<port>/api/rigs`와 `/api/rigs/<id>/graph`를 조회합니다. 결과는 10초 동안 캐시하고, 요청마다 2초 타임아웃이 걸려 있습니다.
+- 그래프 노드의 `resumeToken`(= Claude Code 세션 ID)으로 화면의 직원과 짝을 맞춥니다. 토큰이 오래돼 맞지 않으면 세션 이름(`canonicalSessionName`)으로 찾습니다.
+- 데몬이 없거나 응답이 없으면 `/api/rigs`는 빈 목록을 돌려주고, 연동 표시만 사라집니다.
+- 데몬 접속은 로컬(127.0.0.1)에서만 하며, OpenRig 쪽 상태는 바꾸지 않습니다.
+
 ## 동작 방식과 보안
 
 - 서버는 `~/.claude/sessions/*.json`에서 살아 있는 세션을 찾고, `~/.claude/projects/` 아래의 트랜스크립트(`.jsonl`)를 읽어 대화 내역과 상태를 만듭니다. WSL에서는 `/mnt/c/Users/*/.claude`도 함께 읽습니다.
 - 세션 파일의 PID와 프로세스 시작 시각을 대조해, PID가 재사용된 오래된 세션은 걸러 냅니다.
 - 서버는 **127.0.0.1에만 바인딩**되므로 다른 PC에서는 접속할 수 없습니다. 해고 API는 커스텀 헤더를 요구해, 다른 웹사이트가 브라우저를 통해 세션을 종료할 수 없게 막습니다.
-- 외부로 데이터를 보내지 않습니다. three.js와 marked는 `vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
+- 외부로 데이터를 보내지 않습니다. 접속하는 곳은 로컬 파일과 (있다면) 로컬 OpenRig 데몬뿐입니다. three.js와 marked는 `vendor/`에 포함되어 있어 CDN 접속도 필요 없습니다.
 
 ## 구성
 
