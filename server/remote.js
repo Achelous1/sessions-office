@@ -50,16 +50,24 @@ function workspaceOf(session) {
 }
 
 // ---------- status ----------
+// Status fields come as enum names ("SESSION_STATUS_BUCKET_WORKING") or as plain words ("working", "running"),
+// depending on the endpoint; both are read as the plain word.
+const enumWord = value => typeof value === 'string' ? value.toLowerCase().replace(/^session_status_(bucket_)?/, '') : null;
+const STATUS_FIELDS = ['status', 'session_status', 'status_bucket', 'worker_status', 'connection_status'];
+
 function statusOf(session) {
+  const bucket = enumWord(session.status_bucket), worker = enumWord(session.worker_status), state = enumWord(session.session_status);
+  if (bucket === 'blocked' || worker === 'requires_action') return 'waiting';
+  // working right now wins over the summary of the previous turn
+  if (bucket === 'working' || worker === 'running' || (!bucket && !worker && state === 'running')) return 'busy';
   const summary = session.post_turn_summary ?? session.external_metadata?.post_turn_summary;
-  if (session.status_bucket === 'SESSION_STATUS_BUCKET_BLOCKED' || summary?.status_category === 'need_input' || summary?.needs_action) return 'waiting';
-  if (session.status_bucket === 'SESSION_STATUS_BUCKET_WORKING' || session.session_status === 'SESSION_STATUS_RUNNING') return 'busy';
+  if (summary?.status_category === 'need_input' || summary?.needs_action) return 'waiting';
   return 'idle';
 }
 
-const isArchived = s => s.session_status === 'SESSION_STATUS_ARCHIVED' || s.status === 'archived';
+const isArchived = s => enumWord(s.session_status) === 'archived' || enumWord(s.status) === 'archived';
 // a bridge session only lives while its PC holds the connection; a cloud one until it is archived
-const isLive = s => !isArchived(s) && (s.environment_kind !== 'bridge' || s.connection_status === 'connected');
+const isLive = s => !isArchived(s) && (s.environment_kind !== 'bridge' || enumWord(s.connection_status) === 'connected');
 
 const repoOf = s => s.session_context?.sources?.find(src => src.git_repository)?.git_repository.url?.replace(/^https:\/\/github\.com\//, '');
 
@@ -74,6 +82,7 @@ function summarize(s) {
     // the one-line status a session reports after each turn doubles as its latest "answer" bubble
     lastAnswer: summary?.status_detail ? { role: 'assistant', text: summary.status_detail, ts: s.updated_at ?? s.last_event_at } : null,
     lastTool: null, subagents: [], shell: 0, remote: true,
+    apiStatus: Object.fromEntries(STATUS_FIELDS.filter(f => s[f] != null).map(f => [f, s[f]])), // as the API sent it, for /api/remote
   };
 }
 
@@ -169,7 +178,11 @@ function listRemoteSessions() {
   return cache.data.map(withActivity);
 }
 
-const remoteStatus = () => ({ enabled, error: enabled ? cache.error : null });
+// on/off, the last error, and each session's raw status fields next to how they were read (to check the mapping)
+const remoteStatus = () => ({
+  enabled, error: enabled ? cache.error : null,
+  sessions: cache.data.map(s => ({ title: s.title, status: s.status, api: s.apiStatus })),
+});
 
 const isRemoteId = id => cache.data.some(s => s.id === id);
 

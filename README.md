@@ -193,7 +193,7 @@ docs/media/            README용 스크린샷·영상
 | POST | `/api/session/:id/fire` | 로컬 세션 종료 / 원격 세션 아카이브 (`x-office: 1` 헤더 필요) |
 | GET | `/api/history` | 지난 세션과 복구 명령 |
 | GET | `/api/rigs` | OpenRig 팀과 위임 관계 |
-| GET | `/api/remote` | 원격 연결 여부와 마지막 오류 |
+| GET | `/api/remote` | 원격 연결 여부, 마지막 오류, 원격 세션별로 API가 보낸 상태값과 그걸 어떻게 읽었는지 (상태 판정 확인용) |
 | POST | `/api/remote` | `{ "enabled": true/false }`로 원격 연결 켜기·끄기 (`x-office: 1` 헤더 필요) |
 
 ### 테스트

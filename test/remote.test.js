@@ -61,3 +61,15 @@ test('events become a chat log in time order', () => {
   ]);
   assert.deepEqual(chat.map(m => [m.role, m.text, m.ts, m.turn]), [['user', 'hello', '1', 1], ['assistant', 'hi there', '2', 1]]);
 });
+
+test('status words are read in either form, and working beats an old summary', () => {
+  const [plain, enumForm, stale, blocked] = selectLive([
+    session('a', { session_status: 'running', status_bucket: 'working' }),
+    session('b', { session_status: 'SESSION_STATUS_RUNNING', status_bucket: 'SESSION_STATUS_BUCKET_WORKING' }),
+    session('c', { status_bucket: 'working', post_turn_summary: { status_category: 'need_input' } }),
+    session('d', { worker_status: 'requires_action' }),
+  ]);
+  assert.deepEqual([plain.status, enumForm.status, stale.status, blocked.status], ['busy', 'busy', 'busy', 'waiting']);
+  assert.deepEqual(selectLive([session('e', { status: 'archived', session_status: undefined })]), []);
+  assert.deepEqual(selectLive([bridge('f', { connection_status: 'disconnected' })]), []);
+});
