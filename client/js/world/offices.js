@@ -1,18 +1,19 @@
-// Offices other than the local one: a small annex per remote PC (north of the main office, each wired to a
-// satellite dish), and one office floating on a cloud for claude.ai/code cloud sessions.
+// Offices other than the local one: a small annex per remote PC (each wired to a satellite dish), and one office
+// floating on a cloud for claude.ai/code cloud sessions. Every office stands on its own spot far away from the
+// others, beyond the camera's far plane even at full zoom-out (see core/engine.js), so you visit them one at a time.
 // Remote employees always sit at their desks; there is no pantry out there.
 import * as THREE from 'three';
 import { scene } from '../core/engine.js';
 import { vox } from '../core/voxel.js';
 import { overlayElement, pin } from '../core/overlay.js';
-import { L, CELL, DESKS_PER_POD, podDeskSlot } from './layout.js';
+import { CELL, DESKS_PER_POD, podDeskSlot } from './layout.js';
 import { POD_RUG } from './palette.js';
 import { makeSatelliteDish, animateDish, layCable } from './satellite-dish.js';
 
-const ANNEX_DISTANCE = 22;      // gap between the main office's back wall and the annex row
-const ANNEX_SPACING = 6, DISH_SPACE = 11;
+export const OFFICE_SPACING = 600; // > camera far plane + max zoom distance + office size
+const DISH_SPACE = 11;
 const ANNEX_WALL = 1.2;
-const CLOUD_Y = 13, CLOUD_DISTANCE = 26, CLOUD_PODS_PER_ROW = 2;
+const CLOUD_Y = 13, CLOUD_PODS_PER_ROW = 2;
 
 // lit a little from within, so the shaded sides stay white instead of turning grey
 const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x8a93a3 });
@@ -87,27 +88,30 @@ function clear() {
 // ---------- arranging ----------
 // workspaces: [{ workspace: { id, kind, name }, count }] for every non-local workspace with sessions.
 // Rebuilds only when an office appears, disappears, grows or shrinks, or the main office moved.
+// An office of `pods` pods in a grid `cols` wide, centered on (cx, cz).
+function officeGrid(cx, cz, y, pods, cols) {
+  const rows = Math.ceil(pods / cols), minX = cx - (cols * CELL + 2) / 2, minZ = cz - (rows * CELL + 2) / 2;
+  const podList = Array.from({ length: pods }, (_, p) => podAt(minX + 1 + (p % cols) * CELL, minZ + 1 + Math.floor(p / cols) * CELL));
+  return { pods: podList, bounds: { minX, maxX: minX + cols * CELL + 2, minZ, maxZ: minZ + rows * CELL + 2, y } };
+}
+
+// workspaces: [{ workspace: { id, kind, name }, count }] for every non-local workspace with sessions.
+// Remote PCs line up east of the main office, the cloud sits north; each OFFICE_SPACING apart.
+// Rebuilds only when an office appears, disappears, grows or shrinks.
 export function arrangeOffices(workspaces) {
-  const key = JSON.stringify([L.back, L.PX, L.RX, workspaces.map(w => [w.workspace.id, w.workspace.name, podCount(w.count)])]);
+  const key = JSON.stringify(workspaces.map(w => [w.workspace.id, w.workspace.name, podCount(w.count)]));
   if (key === builtKey) return;
   builtKey = key;
   clear();
-  let x = L.PX;
-  for (const { workspace, count } of workspaces.filter(w => w.workspace.kind === 'remote')) {
-    const pods = podCount(count), maxZ = L.back - ANNEX_DISTANCE, minZ = maxZ - CELL - 2;
-    const podList = Array.from({ length: pods }, (_, p) => podAt(x + 1 + p * CELL, minZ + 1));
-    const bounds = { minX: x, maxX: x + pods * CELL + 2, minZ, maxZ, y: 0 };
+  workspaces.filter(w => w.workspace.kind === 'remote').forEach(({ workspace, count }, k) => {
+    const pods = podCount(count), { pods: podList, bounds } = officeGrid(OFFICE_SPACING * (k + 1), 0, 0, pods, pods);
     const office = { ...workspace, pods: podList, bounds, view: { ...bounds, maxX: bounds.maxX + DISH_SPACE + 1 } }; // view includes the dish
     offices.set(workspace.id, office);
     buildAnnex(office);
-    x = office.bounds.maxX + DISH_SPACE + ANNEX_SPACING;
-  }
+  });
   const cloud = workspaces.find(w => w.workspace.kind === 'cloud');
   if (cloud) {
-    const pods = podCount(cloud.count), cols = Math.min(pods, CLOUD_PODS_PER_ROW), rows = Math.ceil(pods / CLOUD_PODS_PER_ROW);
-    const minX = L.RX + CLOUD_DISTANCE, minZ = -rows * CELL / 2 - 1;
-    const podList = Array.from({ length: pods }, (_, p) => podAt(minX + 1 + (p % cols) * CELL, minZ + 1 + Math.floor(p / cols) * CELL));
-    const bounds = { minX, maxX: minX + cols * CELL + 2, minZ, maxZ: minZ + rows * CELL + 2, y: CLOUD_Y };
+    const pods = podCount(cloud.count), { pods: podList, bounds } = officeGrid(0, -OFFICE_SPACING, CLOUD_Y, pods, Math.min(pods, CLOUD_PODS_PER_ROW));
     const office = { ...cloud.workspace, pods: podList, bounds, view: bounds };
     offices.set(cloud.workspace.id, office);
     buildCloud(office);
@@ -123,7 +127,15 @@ export function officeSlot(workspaceId, i) {
 
 // the area to frame when zooming to an office
 export const officeView = id => offices.get(id)?.view;
-export const allOfficeViews = () => [...offices.values()].map(o => o.view);
+// the remote office closest to a point, or null when the point is nearer the main office (at the origin)
+export function nearestOfficeView({ x, z }) {
+  let best = null, bestDistance = Math.hypot(x, z);
+  for (const { view } of offices.values()) {
+    const distance = Math.hypot(x - (view.minX + view.maxX) / 2, z - (view.minZ + view.maxZ) / 2);
+    if (distance < bestDistance) [best, bestDistance] = [view, distance];
+  }
+  return best;
+}
 
 export function stepOffices(now) {
   for (const dish of dishes) animateDish(dish, now);

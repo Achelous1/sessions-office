@@ -4,6 +4,7 @@ import { vox } from '../core/voxel.js';
 import { SKIN, SHIRT, HAIR, hash } from '../world/palette.js';
 
 const TROUSERS = 0x2c3e50, SHOES = 0x1a1a1a, EYES = 0x111111;
+const HEAD_CENTER = 2.5;
 
 // legs pivot at the hip and the knee, so sitting folds forward (+z = facing direction)
 function leg(parent, x) {
@@ -22,9 +23,11 @@ export function person(seed, shirt) {
   shirt ??= SHIRT[(h >> 3) % SHIRT.length];
   u.legs = [leg(g, -.2), leg(g, .2)];
   vox(g, shirt, [1, 1.1, .6], [0, 1, 0]);
-  u.head = vox(g, skin, [.8, .8, .8], [0, 2.1, 0]);
-  vox(g, HAIR[(h >> 6) % HAIR.length], [.85, .25, .85], [0, 2.85, 0]);
-  vox(g, EYES, [.12, .12, .05], [-.18, 2.55, .41]); vox(g, EYES, [.12, .12, .05], [.18, 2.55, .41]);
+  // face and hair hang off a head group that pivots at the head's center, so they turn and nod with it
+  u.head = new THREE.Group(); u.head.position.y = HEAD_CENTER; g.add(u.head);
+  vox(u.head, skin, [.8, .8, .8], [0, -.4, 0]);
+  vox(u.head, HAIR[(h >> 6) % HAIR.length], [.85, .25, .85], [0, .35, 0]);
+  vox(u.head, EYES, [.12, .12, .05], [-.18, .05, .41]); vox(u.head, EYES, [.12, .12, .05], [.18, .05, .41]);
   u.arms = [-1, 1].map(side => {
     const arm = new THREE.Group(); arm.position.set(side * .65, 2, 0); g.add(arm);
     vox(arm, shirt, [.3, .9, .3], [0, -.9, 0]); vox(arm, skin, [.3, .2, .3], [0, -1.1, 0]);

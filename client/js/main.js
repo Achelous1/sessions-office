@@ -1,5 +1,5 @@
 // Session Office client: a voxel office where every live Claude Code session is an employee.
-import { renderer, scene, camera, controls, mountRenderer } from './core/engine.js';
+import { renderer, scene, camera, controls, mountRenderer, followSun } from './core/engine.js';
 import { initThemeToggle } from './core/theme.js';
 import { updateWalls, pinZoneSigns } from './world/room.js';
 import { desks } from './world/state.js';
@@ -11,7 +11,7 @@ import { stepTears } from './characters/crying.js';
 import { initChatPanel } from './ui/chat-panel.js';
 import { initStaffDrawer } from './ui/staff-drawer.js';
 import { initPicking } from './ui/picking.js';
-import { fitAll, stepCameraFocus } from './ui/camera-focus.js';
+import { fitCurrentOffice, stepCameraFocus } from './ui/camera-focus.js';
 import { poll, startPolling } from './sync.js';
 
 const MAX_FRAME_SECONDS = .1; // after a background tab, don't teleport everyone
@@ -21,7 +21,7 @@ initThemeToggle(document.getElementById('theme'));
 initChatPanel();
 initStaffDrawer(document.getElementById('list'), poll);
 initPicking();
-document.getElementById('fit').onclick = fitAll;
+document.getElementById('fit').onclick = fitCurrentOffice;
 startPolling();
 
 let last = performance.now();
@@ -36,6 +36,7 @@ renderer.setAnimationLoop(now => {
   stepOffices(now);
   pinZoneSigns();
   controls.update();
+  followSun();
   updateWalls(dt);
   renderer.render(scene, camera);
 });

@@ -1,8 +1,8 @@
-// Smooth camera moves: glide to an employee, or zoom out to fit an office (or all of them). Keeps the viewing angle.
+// Smooth camera moves: glide to an employee, or zoom out to fit an office. Keeps the viewing angle.
 import * as THREE from 'three';
 import { camera, controls } from '../core/engine.js';
 import { L } from '../world/layout.js';
-import { allOfficeViews } from '../world/offices.js';
+import { nearestOfficeView } from '../world/offices.js';
 
 const EMPLOYEE_DISTANCE = 11;
 const FIT_TIGHTNESS = .72; // the bounding sphere is loose for a flat room
@@ -24,14 +24,9 @@ export function focusOnBounds({ minX, maxX, minZ, maxZ, y = 0 }) {
   focus = { at: new THREE.Vector3((minX + maxX) / 2, y, (minZ + maxZ) / 2), dist: FIT_TIGHTNESS * radius / Math.sin(Math.min(vFov, hFov) / 2) };
 }
 
-// every office, local and remote
-export function fitAll() {
-  const all = [localOfficeBounds(), ...allOfficeViews()];
-  focusOnBounds({
-    minX: Math.min(...all.map(b => b.minX)), maxX: Math.max(...all.map(b => b.maxX)),
-    minZ: Math.min(...all.map(b => b.minZ)), maxZ: Math.max(...all.map(b => b.maxZ)),
-    y: Math.max(...all.map(b => b.y)) / 2,
-  });
+// the whole office the camera is looking at (offices are too far apart to show together)
+export function fitCurrentOffice() {
+  focusOnBounds(nearestOfficeView(controls.target) ?? localOfficeBounds());
 }
 
 export function stepCameraFocus(dt) {

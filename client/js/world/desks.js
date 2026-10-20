@@ -19,8 +19,10 @@ const SITTING_ACTS = new Set(['sit', 'sofa', 'beanbag']);
 const FADE_MS = 1600;
 
 const isRemote = session => (session.workspace?.kind ?? 'local') !== 'local';
+// A running shell or monitor means the session is still on the job: it waits at the desk instead of taking a break.
+const hasShellRunning = session => session.shell > 0 || session.status === 'shell';
 // rig members never leave their desk, and remote offices have nowhere else to go
-const isAtWork = session => session.status === 'busy' || session.status === 'waiting' || !!session.rig || isRemote(session);
+const isAtWork = session => session.status === 'busy' || session.status === 'waiting' || hasShellRunning(session) || !!session.rig || isRemote(session);
 
 // ---------- hangout spots ----------
 const takenSpots = new Map(); // spot index -> desk id
