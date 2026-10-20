@@ -27,14 +27,16 @@ function officeRow({ id, kind, name }, sessions, bounds) {
 
 // remote: { enabled, error } from the server, or null when unknown
 function remoteNote(remote) {
-  if (!remote?.enabled) return el('div', 'empty', '원격·클라우드 세션 표시가 꺼져 있습니다 (REMOTE=0).');
+  if (!remote?.enabled) return el('div', 'empty', '원격 연결이 꺼져 있습니다. 왼쪽 아래 📡 원격 연결 버튼으로 켤 수 있습니다.');
   if (remote.error) return el('div', 'empty', '원격 세션을 불러오지 못했습니다: ' + remote.error);
   return null;
 }
 
 export function renderOffices(local, others, remote) {
   lastRender = [local, others, remote];
+  const before = selectedOffice();
   keepSelectionIn(['local', ...others.map(o => o.workspace.id)]);
+  if (selectedOffice() !== before) focusOnBounds(localOfficeBounds()); // the office we were in closed: go home
   const key = JSON.stringify([selectedOffice(), local.map(s => s.status), others.map(o => [o.workspace.id, o.sessions.map(s => s.status)]), remote]);
   if (key === renderedKey) return;
   renderedKey = key;

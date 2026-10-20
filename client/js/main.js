@@ -11,6 +11,7 @@ import { stepTears } from './characters/crying.js';
 import { initChatPanel } from './ui/chat-panel.js';
 import { initStaffDrawer } from './ui/staff-drawer.js';
 import { initPicking } from './ui/picking.js';
+import { initRemoteToggle } from './ui/remote-toggle.js';
 import { fitCurrentOffice, stepCameraFocus } from './ui/camera-focus.js';
 import { poll, startPolling } from './sync.js';
 
@@ -22,6 +23,7 @@ initChatPanel();
 initStaffDrawer(document.getElementById('list'), poll);
 initPicking();
 document.getElementById('fit').onclick = fitCurrentOffice;
+initRemoteToggle(document.getElementById('remote'), poll);
 startPolling();
 
 let last = performance.now();

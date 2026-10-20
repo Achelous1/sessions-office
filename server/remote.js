@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const api = require('./anthropic-api');
 const { chatFromEntries, activityOf } = require('./transcripts');
-const { SHOW_REMOTE, MAX_CLOUD_SESSIONS } = require('./config');
+const { SHOW_REMOTE, SETTINGS_FILE, MAX_CLOUD_SESSIONS } = require('./config');
 
 const PAGE_SIZE = 50, MAX_PAGES = 4;
 const CACHE_MS = 5000;
@@ -77,6 +77,23 @@ function summarize(s) {
   };
 }
 
+// ---------- on / off ----------
+function readSettings() {
+  try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return {}; }
+}
+let enabled = readSettings().remote ?? SHOW_REMOTE;
+
+// Off: no request goes to the API at all, and the remote employees leave on the next poll.
+function setRemoteEnabled(on) {
+  enabled = !!on;
+  try {
+    fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ ...readSettings(), remote: enabled }));
+  } catch {}
+  Object.assign(cache, { at: 0, data: [], error: null });
+  activity.clear();
+}
+
 // ---------- listing ----------
 async function fetchAll() {
   const sessions = [];
@@ -102,7 +119,8 @@ const cache = { at: 0, data: [], error: null, refreshing: null };
 
 async function refresh() {
   try {
-    Object.assign(cache, { data: selectLive(await fetchAll()), error: null });
+    const sessions = selectLive(await fetchAll());
+    if (enabled) Object.assign(cache, { data: sessions, error: null }); // switched off meanwhile: drop it
   } catch (e) {
     cache.error = e.message; // keep showing the last good list
   }
@@ -145,13 +163,13 @@ const withActivity = s => {
 // Never waits on the network: returns the last list and refreshes it in the background, so a slow or
 // unreachable API can't hold up the local office. Remote sessions show up from the second poll on.
 function listRemoteSessions() {
-  if (!SHOW_REMOTE) return [];
+  if (!enabled) return [];
   if (Date.now() - cache.at >= CACHE_MS) cache.refreshing ??= refresh();
   updateActivity(cache.data);
   return cache.data.map(withActivity);
 }
 
-const remoteStatus = () => ({ enabled: SHOW_REMOTE, error: cache.error });
+const remoteStatus = () => ({ enabled, error: enabled ? cache.error : null });
 
 const isRemoteId = id => cache.data.some(s => s.id === id);
 
@@ -176,4 +194,4 @@ async function archiveRemoteSession(id) {
   cache.at = 0;
 }
 
-module.exports = { listRemoteSessions, remoteStatus, isRemoteId, remoteSessionDetail, archiveRemoteSession, selectLive, chatOfEvents };
+module.exports = { listRemoteSessions, remoteStatus, setRemoteEnabled, isRemoteId, remoteSessionDetail, archiveRemoteSession, selectLive, chatOfEvents };

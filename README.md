@@ -86,14 +86,16 @@ node server         # 또는 npm start
 | `PORT` | `4545` | 서버 포트 (`PORT=5000 ./start.sh`) |
 | `SHOW_SDK` | (꺼짐) | `1`이면 SDK로 띄운 세션(claude-mem observer 등)도 표시 |
 | `NO_WSL` | (꺼짐) | Windows `start.cmd`에서 WSL 대신 Windows node로 실행 |
-| `REMOTE` | (켜짐) | `0`이면 원격 PC·클라우드 세션을 불러오지 않음 |
+| `REMOTE` | (켜짐) | `0`이면 원격 연결을 꺼진 상태로 시작 (📡 버튼으로 한 번이라도 바꾼 뒤에는 저장된 설정을 따름) |
 | `MAX_CLOUD_SESSIONS` | `24` | 구름 사무실에 보여 줄 클라우드 세션 수 (최근 생성 순) |
 
 ## 원격 세션
 
 Remote Control이 켜진 다른 PC의 세션과 claude.ai/code 클라우드 세션을 보여 줍니다. 따로 설정할 것은 없습니다. 이 PC에서 Claude Code에 로그인되어 있으면 자동으로 불러옵니다.
 
-> ⚠️ **비공식 API를 씁니다.** 세션 목록은 claude.ai 웹과 Remote Control이 쓰는 `api.anthropic.com/v1/code/sessions`에서 가져옵니다. 이 API는 공개 문서가 없어서, Anthropic이 바꾸면 예고 없이 동작하지 않을 수 있습니다. 그래도 로컬 사무실은 영향을 받지 않습니다. 원치 않으면 `REMOTE=0`으로 끄세요.
+왼쪽 아래 **📡 원격 연결** 버튼으로 켜고 끌 수 있습니다. 끄면 `api.anthropic.com`에 요청을 전혀 보내지 않고 원격 직원도 사라집니다. 이 설정은 `~/.session-office/settings.json`에 저장되어 다시 실행해도 유지됩니다.
+
+> ⚠️ **비공식 API를 씁니다.** 세션 목록은 claude.ai 웹과 Remote Control이 쓰는 `api.anthropic.com/v1/code/sessions`에서 가져옵니다. 이 API는 공개 문서가 없어서, Anthropic이 바꾸면 예고 없이 동작하지 않을 수 있습니다. 그래도 로컬 사무실은 영향을 받지 않습니다. 원치 않으면 📡 원격 연결 버튼으로 끄세요.
 
 ### 어떤 세션이 어디에 앉나
 | 세션 | 표시 조건 | 사무실 |
@@ -191,7 +193,8 @@ docs/media/            README용 스크린샷·영상
 | POST | `/api/session/:id/fire` | 로컬 세션 종료 / 원격 세션 아카이브 (`x-office: 1` 헤더 필요) |
 | GET | `/api/history` | 지난 세션과 복구 명령 |
 | GET | `/api/rigs` | OpenRig 팀과 위임 관계 |
-| GET | `/api/remote` | 원격 세션 표시 여부와 마지막 오류 |
+| GET | `/api/remote` | 원격 연결 여부와 마지막 오류 |
+| POST | `/api/remote` | `{ "enabled": true/false }`로 원격 연결 켜기·끄기 (`x-office: 1` 헤더 필요) |
 
 ### 테스트
 ```bash

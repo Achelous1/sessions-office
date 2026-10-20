@@ -5,14 +5,36 @@
 //   GET  /api/history           past local sessions with a resume command
 //   GET  /api/rigs              OpenRig teams and delegation edges
 //   GET  /api/remote            whether remote sessions are on, and the last error reading them
+//   POST /api/remote            { enabled } turns reading remote sessions on or off
 const { listLiveSessions, findLiveSession, summarize, sessionDetail, listHistory } = require('./sessions');
-const { listRemoteSessions, remoteStatus, isRemoteId, remoteSessionDetail, archiveRemoteSession } = require('./remote');
+const { listRemoteSessions, remoteStatus, setRemoteEnabled, isRemoteId, remoteSessionDetail, archiveRemoteSession } = require('./remote');
 const { terminate } = require('./processes');
 const { listRigs } = require('./rigs');
 const { serveStatic } = require('./static');
 
 const SESSION_ROUTE = /^\/api\/session\/([\w-]+)$/;
 const FIRE_ROUTE = /^\/api\/session\/([\w-]+)\/fire$/;
+
+// the custom header forces a CORS preflight we never answer, so other websites can't change things
+const fromThisPage = req => req.method === 'POST' && req.headers['x-office'] === '1';
+
+const MAX_BODY = 1024;
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > MAX_BODY) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch (e) { reject(e); } });
+    req.on('error', reject);
+  });
+}
+
+async function toggleRemote(req, res) {
+  if (!fromThisPage(req)) return sendJson(res, { error: 'forbidden' }, 403);
+  const { enabled } = await readJsonBody(req);
+  if (typeof enabled !== 'boolean') return sendJson(res, { error: 'enabled must be true or false' }, 400);
+  setRemoteEnabled(enabled);
+  sendJson(res, remoteStatus());
+}
 
 function sendJson(res, body, status = 200) {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -22,8 +44,7 @@ function sendJson(res, body, status = 200) {
 const listAllSessions = () => [...listLiveSessions().map(summarize), ...listRemoteSessions()];
 
 async function fireSession(req, res, id) {
-  // the custom header forces a CORS preflight we never answer, so other websites can't fire sessions
-  if (req.method !== 'POST' || req.headers['x-office'] !== '1') return sendJson(res, { error: 'forbidden' }, 403);
+  if (!fromThisPage(req)) return sendJson(res, { error: 'forbidden' }, 403);
   const session = findLiveSession(id);
   try {
     if (session) terminate(session);
@@ -49,7 +70,7 @@ async function handleRequest(req, res) {
     if (url === '/api/sessions') return sendJson(res, listAllSessions());
     if (url === '/api/history') return sendJson(res, listHistory());
     if (url === '/api/rigs') return sendJson(res, await listRigs());
-    if (url === '/api/remote') return sendJson(res, remoteStatus());
+    if (url === '/api/remote') return req.method === 'POST' ? await toggleRemote(req, res) : sendJson(res, remoteStatus());
     const fire = url.match(FIRE_ROUTE);
     if (fire) return await fireSession(req, res, fire[1]);
     const session = url.match(SESSION_ROUTE);

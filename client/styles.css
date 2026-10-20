@@ -51,8 +51,12 @@ details.tools div { font-family:ui-monospace, Menlo, monospace; font-size:11px; 
 #drawer { position:fixed; top:112px; left:16px; width:min(340px, calc(100vw - 32px)); max-height:calc(100% - 128px); display:flex; flex-direction:column;
           background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 24px #0003; overflow:hidden; }
 #drawer[hidden] { display:none; }
-#fit { position:fixed; left:16px; bottom:16px; z-index:10; font:inherit; font-size:12px; padding:5px 12px; border-radius:999px;
-       cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--fg); box-shadow:0 2px 8px #0002; }
+#corner { position:fixed; left:16px; bottom:16px; z-index:10; display:flex; gap:8px; }
+#corner button { font:inherit; font-size:12px; padding:5px 12px; border-radius:999px;
+                 cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--fg); box-shadow:0 2px 8px #0002; }
+#remote::after { content:' 꺼짐'; color:var(--muted); }
+#remote[aria-pressed="true"]::after { content:' 켜짐'; color:var(--ok); }
+#remote:disabled { opacity:.6; cursor:wait; }
 .tabs { display:flex; border-bottom:1px solid var(--line); }
 .tabs button { flex:1; padding:8px; font:inherit; font-size:13px; background:none; border:0; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; }
 .tabs button.on { color:var(--fg); border-bottom-color:var(--accent); }
