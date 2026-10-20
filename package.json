@@ -1,0 +1,13 @@
+{
+  "name": "sessions-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voxel office that shows live Claude Code sessions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
