@@ -6,7 +6,7 @@ import { overlayElement, hiddenBubble, showBubble, pin } from '../core/overlay.j
 import { hangoutSpots } from './layout.js';
 import { desks, clickables } from './state.js';
 import { resolve, goTo, stepAgent } from './navigation.js';
-import { updateLaptopScreen } from './laptop-screen.js';
+import { createMonitorLight, updateLaptopScreen } from './laptop-screen.js';
 import { buildCloudDesk } from './cloud-desk.js';
 import { addThemedLight } from '../core/theme.js';
 import { CHAIR, HELD_ITEM, hash } from './palette.js';
@@ -70,10 +70,12 @@ function buildWoodenDesk(g, sessionId) {
 // cloud sessions sit on their own cloud, at a cloud desk on a cloud chair
 function buildDesk(session) {
   const group = new THREE.Group(); scene.add(group);
-  let untrackLight = null;
-  if (session.workspace?.kind === 'cloud') untrackLight = addThemedLight(buildCloudDesk(group));
+  const cloud = session.workspace?.kind === 'cloud', untrackLights = [];
+  if (cloud) untrackLights.push(addThemedLight(buildCloudDesk(group)));
   else buildWoodenDesk(group, session.id);
-  return { group, screen: addLaptop(group), untrackLight };
+  const screen = addLaptop(group);
+  if (cloud) untrackLights.push(addThemedLight(createMonitorLight(screen)));
+  return { group, screen, untrackLight: () => untrackLights.forEach(untrack => untrack()) };
 }
 
 // A new local session walks in from the door; ones already running on page load, and remote ones, start in place.

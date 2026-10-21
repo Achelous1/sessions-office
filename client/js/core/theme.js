@@ -13,13 +13,13 @@ const lamps = []; // { light, bulb } — pendant lamps are rebuilt with the room
 export function clearLamps() { lamps.length = 0; }
 export function addLamp(light, bulb) { lamps.push({ light, bulb }); }
 
-// Lights that come and go with their owner (a cloud desk's mood lamp): { light, bulb, night: intensity, glow: color }.
+// Lights that come and go with their owner: { light, night: intensity, bulb?: mesh, glow?: color }.
 // Off by day, on at night. Returns a function that stops tracking it.
 const ownedLights = new Set();
 function applyOwnedLight(entry) {
   const night = current === 'night';
   entry.light.intensity = night ? entry.night : 0;
-  entry.bulb.material.color.setHex(night ? entry.glow : 0xcfc6b4);
+  if (entry.bulb) entry.bulb.material.color.setHex(night ? entry.glow : 0xcfc6b4);
 }
 export function addThemedLight(entry) {
   ownedLights.add(entry);

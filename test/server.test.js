@@ -66,6 +66,8 @@ test('static files stay inside the client folder', () => {
   assert.equal(path.basename(resolveClientFile('/')), 'index.html');
   assert.ok(resolveClientFile('/js/main.js'));
   assert.ok(resolveClientFile('/vendor/three.module.js'));
+  assert.ok(resolveClientFile('/assets/logos/claude.png'));
+  assert.ok(resolveClientFile('/assets/logos/chatgpt.svg'));
   assert.equal(resolveClientFile('/../server/index.js'), null);
   assert.equal(resolveClientFile('/%2e%2e/package.json'), null);
   assert.equal(resolveClientFile('/missing.js'), null);

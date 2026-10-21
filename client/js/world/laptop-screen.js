@@ -5,6 +5,15 @@ const WIDTH = 128, HEIGHT = 80, LINE_HEIGHT = 7, MAX_LINES = 11;
 const TEXT_COLORS = ['#9be29b', '#d7dde4', '#d7dde4', '#7fb4ff', '#f0c674'];
 const BUSY_BRIGHT = 0x9fd8ff, BUSY_DIM = 0x5ab0f0, IDLE = 0x223040;
 
+// A monitor's unlit material does not illuminate its worker; cloud desks need a small front fill at night.
+export function createMonitorLight(screen) {
+  const light = new THREE.PointLight(0xb9dcff, 0, 4, 1.5);
+  light.position.copy(screen.position);
+  light.position.z += .25;
+  screen.parent.add(light); // follows the lid tilt, desk placement and cloud bobbing
+  return { light, night: 3 };
+}
+
 function addLine(term) {
   const words = Array.from({ length: 1 + Math.floor(Math.random() * 5) }, () => 4 + Math.random() * 22);
   term.lines.push({ words, indent: Math.random() < .3 ? 8 : 0, color: TEXT_COLORS[Math.floor(Math.random() * TEXT_COLORS.length)] });

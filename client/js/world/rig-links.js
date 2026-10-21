@@ -18,7 +18,8 @@ function voxelPlane() {
 }
 
 // rig members are matched by session id, or by name when the id went stale
-const deskOf = member => desks.get(member.id) ?? [...desks.values()].find(d => d.session.name === member.name);
+const deskOf = member => desks.get(member.id) ?? desks.get('codex-' + member.id)
+  ?? [...desks.values()].find(d => d.session.name === member.name);
 
 function addFlight(from, to, i, total) {
   const start = new THREE.Vector3(from.x, ARC_HEIGHT, from.z), end = new THREE.Vector3(to.x, ARC_HEIGHT, to.z);
