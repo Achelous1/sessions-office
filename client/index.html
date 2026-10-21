@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Office</title>
+<link rel="stylesheet" href="/styles.css">
+<script type="importmap">{ "imports": {
+  "three": "/vendor/three.module.js", "marked": "/vendor/marked.esm.js" } }</script>
+<script type="module" src="/js/main.js"></script>
+</head>
+<body>
+<div id="scene"></div>
+<div id="hud"><h1>Session Office</h1><div id="count">불러오는 중…</div><button id="list">☰ 직원 목록</button><button id="theme"></button></div>
+<div id="corner">
+  <button id="fit" title="지금 보고 있는 사무실 전체가 화면에 들어오게 맞춥니다">⤢ 전체 보기</button>
+  <button id="remote" title="원격 PC·클라우드 세션을 불러올지 정합니다. 끄면 요청을 보내지 않습니다" aria-pressed="false">📡 원격 연결</button>
+</div>
+<aside id="drawer" hidden>
+  <div class="tabs"><button data-tab="offices">사무실</button><button data-tab="staff" class="on">직원</button><button data-tab="history">히스토리 (복구)</button></div>
+  <div id="offices" hidden></div><div id="staff"></div><div id="history" hidden></div>
+</aside>
+<div id="overlay"></div>
+<aside id="panel"><div id="grip" title="드래그해서 너비 조절"></div><button id="close" aria-label="닫기">×</button>
+  <header><h2 id="p-title"></h2><div class="meta" id="p-meta"></div></header><div id="chat"></div></aside>
+</body>
+</html>
