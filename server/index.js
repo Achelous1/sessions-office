@@ -2,8 +2,10 @@
 const http = require('http');
 const { PORT, HOSTNAME, SOURCES } = require('./config');
 const { handleRequest } = require('./routes');
+const { CODEX_DIR } = require('./codex');
 
 http.createServer(handleRequest).listen(PORT, HOSTNAME, () => {
   console.log(`session office: http://localhost:${PORT}`);
   console.log(`reading: ${SOURCES.map(s => `${s.host}=${s.dir}`).join(', ')}`);
+  console.log(`reading Codex: ${CODEX_DIR}`);
 });

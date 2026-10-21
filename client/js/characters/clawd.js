@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { vox, material, pixelArt } from '../core/voxel.js';
 import { CLAUDE_ORANGE } from '../world/palette.js';
+import { makeCodexCompanion } from './codex-companion.js';
 
 // Desk-local spots (+z faces the worker; the chair sits at z 1.6): beside the laptop, on the screen, back corners,
 // on the worker's head ('head' = rides along with the person), then the floor around the chair.
@@ -38,6 +39,7 @@ function makeFace(art) {
 
 function makeClawd() {
   const g = new THREE.Group(), u = g.userData;
+  u.kind = 'claude';
   const body = new THREE.Group(); body.position.y = .12; g.add(body); // rocks and squashes around its feet
   vox(body, bodyMat, [.5, .3, .26], [0, 0, 0]);
   u.arms = [-.3, .3].map(x => vox(body, bodyMat, [.1, .08, .14], [x, .08, 0]));
@@ -63,8 +65,8 @@ export function animateClawd(clawd, now) {
   clawd.rotation.y = Math.sin(t * 1.7) * .35;
   u.body.rotation.z = Math.sin(t * 6) * .16;
   const squash = Math.sin(t * 9) * .07; u.body.scale.set(1 - squash * .6, 1 + squash, 1);
-  u.arms[0].position.y = .12 + Math.max(0, Math.sin(t * 11)) * .07;
-  u.arms[1].position.y = .12 + Math.max(0, -Math.sin(t * 11)) * .07;
+  u.arms[0].position.y = (u.armBase ?? .12) + Math.max(0, Math.sin(t * 11)) * .07;
+  u.arms[1].position.y = (u.armBase ?? .12) + Math.max(0, -Math.sin(t * 11)) * .07;
   // expressions: pick a new one every 1.5-4s, blink now and then while wide-eyed
   if (now > u.nextFace) { u.face = FACE_POOL[Math.floor(Math.random() * FACE_POOL.length)]; u.nextFace = now + 1500 + Math.random() * 2500; }
   const blinking = u.face === 'tall' && (t * 1000) % BLINK_EVERY_MS < BLINK_MS;
@@ -72,14 +74,18 @@ export function animateClawd(clawd, now) {
   if (want !== u.shown) showFace(clawd, want);
 }
 
-// Adds or removes Clawds so the desk shows `count` of them (at most one per spot).
-export function syncClawds(desk, count) {
-  count = Math.min(count, SPOTS.length);
-  while (desk.clawds.length < count) {
-    const clawd = makeClawd(), [x, y, z, on] = SPOTS[desk.clawds.length];
+// Both providers share the same spots and working animation. A child provider overrides its parent's.
+export function syncClawds(desk, agents) {
+  const count = Math.min(agents.length, SPOTS.length);
+  for (let i = 0; i < count; i++) {
+    const provider = agents[i].provider ?? (agents[i].type?.toLowerCase() === 'codex' ? 'codex' : desk.session.provider);
+    const kind = provider === 'codex' ? 'codex' : 'claude';
+    if (desk.clawds[i]?.userData.kind === kind) continue;
+    desk.clawds[i]?.removeFromParent();
+    const clawd = kind === 'codex' ? makeCodexCompanion() : makeClawd(), [x, y, z, on] = SPOTS[i];
     clawd.position.set(x, y, z); clawd.userData.base = y;
     (on === 'head' ? desk.worker.obj : desk.group).add(clawd);
-    desk.clawds.push(clawd);
+    desk.clawds[i] = clawd;
   }
   while (desk.clawds.length > count) { const clawd = desk.clawds.pop(); clawd.parent.remove(clawd); }
 }

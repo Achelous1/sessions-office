@@ -3,7 +3,7 @@ import { fetchSession } from '../api.js';
 import { clip } from '../core/overlay.js';
 import { desks } from '../world/state.js';
 import { renderMarkdown } from './markdown.js';
-import { placeOf, el } from './labels.js';
+import { agentEnvironment, el } from './labels.js';
 
 const MIN_WIDTH = 320, MARGIN = 80, STICK_TO_BOTTOM_PX = 40;
 const WIDTH_KEY = 'panelWidth';
@@ -20,6 +20,7 @@ export function closeChat() {
 }
 
 function statusChip(status) {
+  if (status === 'unknown') return el('span', 'chip', '상태 미확인');
   const busy = status === 'busy', waiting = status === 'waiting';
   return el('span', 'chip ' + (busy ? 'busy' : waiting ? 'wait' : ''), busy ? '● 작업 중' : waiting ? '? 답변 대기' : '휴식 중');
 }
@@ -27,8 +28,9 @@ function statusChip(status) {
 function renderHeader(s) {
   document.getElementById('p-title').textContent = s.title || s.name;
   const meta = document.getElementById('p-meta'), rig = desks.get(s.id)?.session.rig;
-  meta.replaceChildren(statusChip(s.status));
-  meta.append([placeOf(s) + (rig ? ` · rig ${rig.name}/${rig.logicalId}` : ''), !s.remote && `턴 ${s.turns}`, s.name, s.cwd].filter(Boolean).join(' · '));
+  meta.replaceChildren(statusChip(s.status), agentEnvironment(s));
+  meta.append(' · ' + [rig && `rig ${rig.name}/${rig.logicalId}`, !s.remote && `턴 ${s.turns}`, s.name, s.cwd].filter(Boolean).join(' · '));
+  if (s.statusNote) meta.append(`\n${s.statusNote}`);
   if (s.subagents?.length) {
     meta.append(`\n서브에이전트 ${s.subagents.length}개 실행 중: ` + s.subagents.map(a => `${a.type} (${clip(a.description, 40)})`).join(', '));
   }

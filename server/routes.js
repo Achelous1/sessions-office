@@ -11,6 +11,7 @@ const { listRemoteSessions, remoteStatus, setRemoteEnabled, isRemoteId, remoteSe
 const { terminate } = require('./processes');
 const { listRigs } = require('./rigs');
 const { serveStatic } = require('./static');
+const { codex } = require('./codex');
 
 const SESSION_ROUTE = /^\/api\/session\/([\w-]+)$/;
 const FIRE_ROUTE = /^\/api\/session\/([\w-]+)\/fire$/;
@@ -41,10 +42,12 @@ function sendJson(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
-const listAllSessions = () => [...listLiveSessions().map(summarize), ...listRemoteSessions()];
+const listAllSessions = async () => [...listLiveSessions().map(summarize), ...await codex.list(), ...listRemoteSessions()];
 
 async function fireSession(req, res, id) {
   if (!fromThisPage(req)) return sendJson(res, { error: 'forbidden' }, 403);
+  // Codex Desktop shares a process across threads; killing it would stop unrelated work.
+  if (id.startsWith('codex-')) return sendJson(res, { error: 'Codex 세션은 Codex 앱 또는 CLI에서 종료해 주세요' }, 405);
   const session = findLiveSession(id);
   try {
     if (session) terminate(session);
@@ -57,6 +60,10 @@ async function fireSession(req, res, id) {
 }
 
 async function getSession(res, id) {
+  if (id.startsWith('codex-')) {
+    const session = await codex.detail(id);
+    return session ? sendJson(res, session) : sendJson(res, { error: 'not found' }, 404);
+  }
   const session = findLiveSession(id);
   if (session) return sendJson(res, sessionDetail(session));
   const remote = await remoteSessionDetail(id);
@@ -67,8 +74,8 @@ async function getSession(res, id) {
 async function handleRequest(req, res) {
   const url = req.url.split('?')[0];
   try {
-    if (url === '/api/sessions') return sendJson(res, listAllSessions());
-    if (url === '/api/history') return sendJson(res, listHistory());
+    if (url === '/api/sessions') return sendJson(res, await listAllSessions());
+    if (url === '/api/history') return sendJson(res, [...listHistory(), ...await codex.history()].sort((a, b) => b.mtime - a.mtime).slice(0, 60));
     if (url === '/api/rigs') return sendJson(res, await listRigs());
     if (url === '/api/remote') return req.method === 'POST' ? await toggleRemote(req, res) : sendJson(res, remoteStatus());
     const fire = url.match(FIRE_ROUTE);

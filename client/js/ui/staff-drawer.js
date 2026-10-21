@@ -5,7 +5,7 @@ import { clip } from '../core/overlay.js';
 import { desks, firedIds } from '../world/state.js';
 import { openChat, closeChat, selectedSession } from './chat-panel.js';
 import { focusOnEmployee } from './camera-focus.js';
-import { HOST_NAME, STATUS_NAME, placeOf, el } from './labels.js';
+import { STATUS_NAME, agentEnvironment, el } from './labels.js';
 import { selectedOffice, onOfficeChange, officeOf } from './office-selection.js';
 
 const STATUS_ORDER = { waiting: 0, busy: 1 }; // everyone else after
@@ -37,8 +37,14 @@ async function fire(s) {
 
 function staffRow(s) {
   const row = el('div', 'row'), main = el('div', 'main'), fireButton = el('button', 'fire', '해고');
-  main.append(el('div', 't', s.title || s.name),
-              el('div', 's', [STATUS_NAME[s.status] ?? s.status, s.name, placeOf(s), !s.remote && `턴 ${s.turns}`].filter(Boolean).join(' · ')));
+  if (s.canTerminate === false) {
+    fireButton.disabled = true;
+    fireButton.textContent = '앱에서 종료';
+    fireButton.title = 'Codex 앱 또는 CLI에서 이 세션을 종료해 주세요';
+  }
+  const details = el('div', 's');
+  details.append(agentEnvironment(s), ' · ' + [STATUS_NAME[s.status] ?? s.status, s.name, !s.remote && `턴 ${s.turns}`].filter(Boolean).join(' · '));
+  main.append(el('div', 't', s.title || s.name), details);
   row.append(el('span', 'dot ' + s.status), main, fireButton);
   row.onclick = () => {
     const desk = desks.get(s.id);
@@ -55,7 +61,7 @@ export function renderStaff(sessions) {
   lastSessions = sessions;
   const office = selectedOffice();
   const rows = sessions.filter(s => officeOf(s) === office).sort((a, b) => (STATUS_ORDER[a.status] ?? 2) - (STATUS_ORDER[b.status] ?? 2));
-  const key = JSON.stringify([office, rows.map(s => [s.id, s.status, s.turns, s.title])]);
+  const key = JSON.stringify([office, rows.map(s => [s.id, s.status, s.turns, s.title, s.host, s.provider, s.canTerminate])]);
   if (key === renderedStaffKey) return;
   renderedStaffKey = key;
   staffList.replaceChildren(...(rows.length ? rows.map(staffRow) : [el('div', 'empty', '이 사무실에는 직원이 없습니다.')]));
@@ -74,9 +80,10 @@ async function copyCommand(command, button) {
 function historyRow(h) {
   const row = el('div', 'row'), main = el('div', 'main'), copy = el('button', '', '복사');
   const folder = h.cwd?.split(/[\\/]/).pop();
-  main.append(el('div', 't', h.title || h.name || clip(h.lastUser, 60) || h.id),
-              el('div', 's', [new Date(h.mtime).toLocaleString(), HOST_NAME[h.host], h.name, `턴 ${h.turns}`, folder].filter(Boolean).join(' · ')),
-              el('code', '', h.command));
+  const details = el('div', 's');
+  details.append(agentEnvironment(h), ' · ' + [new Date(h.mtime).toLocaleString(), h.name,
+    h.turnsApproximate ? `최근 기록 ${h.turns}턴` : `턴 ${h.turns}`, folder].filter(Boolean).join(' · '));
+  main.append(el('div', 't', h.title || h.name || clip(h.lastUser, 60) || h.id), details, el('code', '', h.command));
   row.title = h.lastUser || '';
   row.append(main, copy);
   row.onclick = () => copyCommand(h.command, copy);
