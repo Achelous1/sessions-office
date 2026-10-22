@@ -34,7 +34,7 @@ renderer.setAnimationLoop(now => {
   stepDesks(dt, now);
   stepVisitor(dt, now);
   stepTears(dt, now);
-  flyPlanes(now);
+  flyPlanes(dt);
   stepOffices(now);
   pinZoneSigns();
   controls.update();
