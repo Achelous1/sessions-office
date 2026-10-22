@@ -127,6 +127,39 @@ test('garland bats remain clear of the fairy bulbs and their glow', async t => {
   }
 });
 
+test('ghosts roam all four sides continuously while bobbing, including across fade cycles', async t => {
+  const { THREE, halloweenEvent, layout, L } = await modules(t);
+  for (const count of [0, 60]) {
+    layout(count);
+    const parent = new THREE.Group();
+    const event = halloweenEvent.create({ parent, walls: { back: new THREE.Group(), front: new THREE.Group() }, bounds: { ...L } });
+    const ghosts = parent.getObjectsByProperty('name', 'halloween-ghost');
+    const seen = ghosts.map(() => new Set()), heights = ghosts.map(() => []);
+    event.update(0);
+    const previous = ghosts.map(g => g.position.clone());
+    for (let now = 250; now <= 600000; now += 250) {
+      event.update(now);
+      ghosts.forEach((g, i) => {
+        assert.ok(g.position.distanceTo(previous[i]) < .6, 'drift stays smooth at loop and fade boundaries');
+        previous[i].copy(g.position);
+        assert.ok(g.position.x > L.RX + 1 || g.position.x < L.PX - 1 ||
+          g.position.z > L.front + 1 || g.position.z < L.back - 1, 'the full route stays outside the walls');
+        if (!g.visible) return;
+        if (g.position.x > L.RX) seen[i].add('east');
+        if (g.position.x < L.PX) seen[i].add('west');
+        if (g.position.z > L.front) seen[i].add('front');
+        if (g.position.z < L.back) seen[i].add('back');
+        heights[i].push(g.position.y);
+      });
+    }
+    ghosts.forEach((g, i) => {
+      assert.equal(seen[i].size, 4, 'each ghost appears along every side of the office');
+      assert.ok(Math.max(...heights[i]) - Math.min(...heights[i]) > .8, 'bobbing is noticeable while roaming');
+    });
+    event.dispose();
+  }
+});
+
 test('the registered Halloween event adds and removes actual props on its inclusive boundary dates', async t => {
   const { THREE, halloweenEvent, layout, L, createSeasonalEvents } = await modules(t);
   layout(0);

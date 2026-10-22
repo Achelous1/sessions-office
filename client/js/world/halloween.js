@@ -146,6 +146,14 @@ function createHalloween({ parent, walls, bounds, camera, desks, visitor }) {
   pumpkin(-25.6, 1.22, back + .65, .75);
   ghost(0); ghost(1);
 
+  const centerX = (PX + RX) / 2, centerZ = (back + front) / 2, margin = 3.5;
+  const ghostPath = new THREE.CatmullRomCurve3([
+    [centerX, front + margin], [RX + margin, front + margin], [RX + margin, centerZ],
+    [RX + margin, back - margin], [centerX, back - margin], [PX - margin, back - margin],
+    [PX - margin, centerZ], [PX - margin, front + margin],
+  ].map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+  const loopSeconds = ghostPath.getLength() / .9;
+
   let startedAt = null;
   return {
     update(now) {
@@ -162,9 +170,15 @@ function createHalloween({ parent, walls, bounds, camera, desks, visitor }) {
         const opacity = Math.max(0, Math.min(age / 2, (18 - age) / 3, 1)) * .86;
         group.visible = opacity > 0;
         ghostMaterials.forEach(mat => { mat.opacity = opacity; });
-        const travel = Math.min(age / 18, 1), bob = reduced ? 0 : Math.sin(t * 1.4 + index) * .28;
-        if (index === 0) group.position.set(RX + 3.1 + Math.sin(travel * Math.PI) * .6, 1.7 + bob, EZ - 3 + travel * 6);
-        else group.position.set(LX + 5 + travel * 9, 2.1 + bob, front + 3);
+        // Travel keeps advancing while invisible, independently of the fade cycle.
+        const travel = (reduced ? 0 : t / loopSeconds * (index ? -.85 : 1)) + index * .25;
+        ghostPath.getPointAt(((travel % 1) + 1) % 1, group.position);
+        const dx = group.position.x - centerX, dz = group.position.z - centerZ, distance = Math.hypot(dx, dz);
+        const sway = reduced ? 0 : Math.sin(t * .45 + index * 2) * .3;
+        group.position.x += dx / distance * sway;
+        group.position.z += dz / distance * sway;
+        const bob = reduced ? 0 : Math.sin(t * 1.05 + index * 2) * .48 + Math.sin(t * .37 + index) * .12;
+        group.position.y = 2.1 + index * .35 + bob;
         group.rotation.y = camera ? Math.atan2(camera.position.x - group.position.x, camera.position.z - group.position.z) : .3;
         group.rotation.z = reduced ? 0 : Math.sin(t * .8 + index) * .07;
       }
