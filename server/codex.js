@@ -122,13 +122,16 @@ function openThreadIds(output, dir) {
   return ids;
 }
 
+// lsof prints mount warnings (e.g. WSL Docker overlays) even when it simply found no codex process.
+const onlyWarnings = stderr => !String(stderr ?? '').split('\n').some(l => l.trim() && !/^(lsof: WARNING:|\s)/.test(l));
+
 function readOpenThreads(dir) {
   if (process.platform === 'win32') return Promise.resolve(null);
   return new Promise(resolve => {
     execFile('lsof', ['-nP', '-c', 'codex', '-Fpcn'], { encoding: 'utf8', timeout: 3000, maxBuffer: 8 * 1024 * 1024 }, (error, out, stderr) => {
       // lsof can return 1 with useful output when some process descriptors cannot be inspected.
       if (out && !error?.killed) return resolve(openThreadIds(out, dir));
-      if (!error || (error.code === 1 && !stderr?.trim())) return resolve(new Set());
+      if (!error || (error.code === 1 && onlyWarnings(stderr))) return resolve(new Set());
       resolve(null); // unavailable/denied: show recent activity as unconfirmed, never pretend it is live
     });
   });
@@ -323,4 +326,4 @@ function createCodexReader({ dir = CODEX_DIR, readOpenThreads: detect = readOpen
   return { list, detail, history };
 }
 
-module.exports = { CODEX_DIR, parseCodexTranscript, openThreadIds, createCodexReader, codex: createCodexReader() };
+module.exports = { CODEX_DIR, parseCodexTranscript, openThreadIds, onlyWarnings, createCodexReader, codex: createCodexReader() };
