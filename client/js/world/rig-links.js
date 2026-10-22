@@ -1,14 +1,15 @@
-// OpenRig links: flight-path arcs between desks, with a little voxel plane flying source -> target.
+// OpenRig links: flight-path arcs between workers' heads, with a little voxel plane flying source -> target.
 import * as THREE from 'three';
 import { scene } from '../core/engine.js';
 import { vox } from '../core/voxel.js';
 import { desks } from './state.js';
 import { CLAUDE_ORANGE } from './palette.js';
 
-const ARC_HEIGHT = 3.1;
+const ABOVE_HEAD = 3.4; // from a worker's feet; same height the name label hangs at
+const REBUILD_DISTANCE = .05; // re-trace an arc only once an end has moved this far
 const links = new THREE.Group(); scene.add(links);
 const linkMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .45, depthWrite: false });
-let shownKey = '', flights = []; // { curve, plane, offset, duration }
+let shownKey = '', flights = []; // { from, to, curve, tube, ends, plane, offset }
 
 function voxelPlane() {
   const g = new THREE.Group(), white = new THREE.MeshBasicMaterial({ color: 0xffffff }), wing = new THREE.MeshBasicMaterial({ color: CLAUDE_ORANGE });
@@ -21,31 +22,43 @@ function voxelPlane() {
 const deskOf = member => desks.get(member.id) ?? desks.get('codex-' + member.id)
   ?? [...desks.values()].find(d => d.session.name === member.name);
 
+const headOf = desk => desk.worker.obj.position.clone().setY(desk.worker.obj.position.y + ABOVE_HEAD);
+
 function addFlight(from, to, i, total) {
-  const start = new THREE.Vector3(from.x, ARC_HEIGHT, from.z), end = new THREE.Vector3(to.x, ARC_HEIGHT, to.z);
-  const mid = start.clone().lerp(end, .5);
-  mid.y += 3.5 + start.distanceTo(end) * .4; // longer hops fly higher
-  const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
-  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, .03, 6), linkMat);
-  tube.castShadow = false; links.add(tube);
-  for (const p of [start, end]) vox(links, linkMat, [.22, .22, .22], [p.x, p.y - .11, p.z]).castShadow = false;
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3());
+  const tube = new THREE.Mesh(new THREE.BufferGeometry(), linkMat); tube.castShadow = false; links.add(tube);
+  const ends = [0, 1].map(() => { const end = vox(links, linkMat, [.22, .22, .22], [0, 0, 0]); end.castShadow = false; return end; });
   const plane = voxelPlane(); links.add(plane);
-  flights.push({ curve, plane, offset: i / Math.max(1, total), duration: 2500 + curve.getLength() * 120 });
+  flights.push({ from, to, curve, tube, ends, plane, offset: i / Math.max(1, total) });
 }
 
-// Redraws the arcs only when the linked seats changed.
+// The arc hangs between the two heads, so it follows a worker who walks off for a break.
+function traceArc(f) {
+  const start = headOf(f.from), end = headOf(f.to);
+  if (start.distanceTo(f.curve.v0) < REBUILD_DISTANCE && end.distanceTo(f.curve.v2) < REBUILD_DISTANCE) return;
+  f.curve.v0.copy(start); f.curve.v2.copy(end);
+  f.curve.v1.copy(start).lerp(end, .5).y += 3.5 + start.distanceTo(end) * .4; // longer hops fly higher
+  f.curve.updateArcLengths(); // the curve caches its lengths
+  f.tube.geometry.dispose();
+  f.tube.geometry = new THREE.TubeGeometry(f.curve, 48, .03, 6);
+  f.ends.forEach((box, k) => box.position.copy(k ? end : start));
+  f.duration = 2500 + f.curve.getLength() * 120;
+}
+
+// Redraws the arcs only when the linked desks changed.
 export function updateRigLinks(rigs) {
   const pairs = rigs.flatMap(r => r.edges.map(e => [deskOf(e.from), deskOf(e.to)])).filter(([a, b]) => a && b && a !== b);
-  const seats = pairs.map(([a, b]) => [a.slot.seat.pos, b.slot.seat.pos]);
-  const key = seats.map(ends => ends.map(p => `${p.x.toFixed(1)},${p.z.toFixed(1)}`).join('>')).join('|');
+  const key = pairs.map(([a, b]) => `${a.id}>${b.id}`).join('|');
   if (key === shownKey) return;
   shownKey = key;
+  for (const f of flights) f.tube.geometry.dispose();
   links.clear(); flights = [];
-  seats.forEach(([from, to], i) => addFlight(from, to, i, seats.length));
+  pairs.forEach(([from, to], i) => addFlight(from, to, i, pairs.length));
 }
 
 export function flyPlanes(now) {
   for (const f of flights) {
+    traceArc(f);
     const t = (now / f.duration + f.offset) % 1, point = f.curve.getPoint(t);
     f.plane.position.copy(point);
     f.plane.lookAt(point.clone().add(f.curve.getTangent(t)));
