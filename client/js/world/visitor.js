@@ -66,7 +66,7 @@ export function stepVisitor(dt, now) {
     if (trip) advanceTrip(now);
     else writeOnWhiteboard(now);
   }
-  pin(bubble, visitor.obj, 3.6);
+  pin(bubble, visitor.obj, visitor.obj.userData.witchHat ? 4.6 : 3.6);
 }
 
 export const visitorAgent = visitor; // for the #debug hook

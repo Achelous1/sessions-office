@@ -53,7 +53,7 @@ function makeClawd() {
 
 function showFace(clawd, name) {
   const u = clawd.userData;
-  u.faces[u.shown ?? u.face].visible = false;
+  u.faces[u.shown ?? 'tall'].visible = false;
   u.faces[name].visible = true;
   u.shown = name;
 }

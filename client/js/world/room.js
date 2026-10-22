@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { scene, camera, controls } from '../core/engine.js';
 import { vox, glassMaterial as glass } from '../core/voxel.js';
 import { applyTheme, addLamp, clearLamps } from '../core/theme.js';
+import { createSeasonalEvents } from '../core/seasonal-events.js';
+import { halloweenEvent } from './halloween.js';
+import { desks } from './state.js';
+import { visitorAgent } from './visitor.js';
 import { overlayElement, pin } from '../core/overlay.js';
 import { L, podOf, hangoutSpots } from './layout.js';
 import { CHAIR, POD_RUG, BEANBAG, VISITOR_SHIRT } from './palette.js';
@@ -13,6 +17,8 @@ const WOOD = [0xc9a57b, 0xbf9a6f, 0xd2ae84];
 
 const room = new THREE.Group();
 scene.add(room);
+const seasonalEvents = createSeasonalEvents([halloweenEvent]);
+export const stepRoomEvents = now => seasonalEvents.update(now);
 
 // ---------- zone signs ----------
 const zones = [
@@ -245,6 +251,7 @@ function buildPantry(W) {
 }
 
 export function buildRoom() {
+  seasonalEvents.dispose();
   room.clear();
   buildFloors();
   const W = buildWalls();
@@ -257,5 +264,6 @@ export function buildRoom() {
   buildLamps();
   buildPartition();
   buildPantry(W);
+  seasonalEvents.rebuild({ parent: room, walls: W, bounds: { ...L }, camera, desks, visitor: visitorAgent });
   room.traverse(o => { if (o.isMesh && o.material === glass) o.castShadow = false; });
 }

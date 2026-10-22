@@ -1,7 +1,7 @@
 // Session Office client: a voxel office where every live Claude Code session is an employee.
 import { renderer, scene, camera, controls, mountRenderer, followSun } from './core/engine.js';
 import { initThemeToggle } from './core/theme.js';
-import { updateWalls, pinZoneSigns } from './world/room.js';
+import { updateWalls, pinZoneSigns, stepRoomEvents } from './world/room.js';
 import { desks } from './world/state.js';
 import { stepDesks } from './world/desks.js';
 import { stepVisitor, visitorAgent } from './world/visitor.js';
@@ -36,6 +36,7 @@ renderer.setAnimationLoop(now => {
   stepTears(dt, now);
   flyPlanes(dt);
   stepOffices(now);
+  stepRoomEvents(now);
   pinZoneSigns();
   controls.update();
   followSun();

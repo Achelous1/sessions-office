@@ -18,6 +18,7 @@ async function modules(t) {
     'codex-companion.mjs': 'client/js/characters/codex-companion.js',
     'laptop-screen.mjs': 'client/js/world/laptop-screen.js',
     'theme.mjs': 'client/js/core/theme.js',
+    'halloween-costumes.mjs': 'client/js/characters/halloween-costumes.js',
   };
   for (const [name, source] of Object.entries(files)) {
     const code = fs.readFileSync(path.join(__dirname, '..', source), 'utf8')
@@ -35,8 +36,83 @@ async function modules(t) {
     export const scene = new THREE.Scene(); scene.background = new THREE.Color();
     export const hemiLight = new THREE.HemisphereLight(); export const sunLight = new THREE.DirectionalLight();`);
   const theme = await import(pathToFileURL(path.join(dir, 'theme.mjs')));
-  return { THREE, ...companions, ...workers, ...palette, ...laptop, ...theme };
+  const costumes = await import(pathToFileURL(path.join(dir, 'halloween-costumes.mjs')));
+  return { THREE, ...companions, ...workers, ...palette, ...laptop, ...theme, ...costumes };
 }
+
+test('Halloween dresses the visitor and both subagent providers as witches, and workers as zombies', async t => {
+  const { THREE, person, pose, syncClawds, animateClawd, createHalloweenCostumes } = await modules(t);
+  const visitor = { obj: person('visitor') }, worker = person('worker');
+  const skin = [...worker.userData.skin], originalMaterials = skin.map(mesh => mesh.material);
+  const shirt = worker.children.find(c => c.isMesh).material;
+  const desk = { group: new THREE.Group(), worker: { obj: worker }, session: { provider: 'claude' }, clawds: [] };
+  const desks = new Map([['worker', desk]]);
+  syncClawds(desk, [{ provider: 'claude' }, { provider: 'codex' }]);
+  const costumes = createHalloweenCostumes({ visitor, desks });
+  costumes.update();
+  assert.equal(visitor.obj.userData.witchHat.parent, visitor.obj.userData.head);
+  assert.equal(worker.userData.witchHat, undefined);
+  assert.ok(worker.userData.head.getObjectByName('halloween-zombie'));
+  assert.equal(skin.length, 3, 'face and both hands change skin');
+  assert.ok(skin.every((mesh, i) => mesh.material !== originalMaterials[i]));
+  assert.ok(skin.every(mesh => mesh.material.color.g > mesh.material.color.r));
+  assert.equal(worker.children.find(c => c.isMesh).material, shirt);
+  const bolts = worker.userData.head.getObjectByName('halloween-zombie').children.filter(c => c.name === 'halloween-bolt');
+  assert.equal(bolts.length, 2);
+  assert.ok(bolts[0].position.x < -.4 && bolts[1].position.x > .4);
+  for (const companion of desk.clawds) {
+    const hat = companion.userData.witchHat;
+    assert.equal(hat.parent, companion.userData.body);
+    animateClawd(companion, 1234);
+    assert.ok(hat.getWorldPosition(new THREE.Vector3()).toArray().every(Number.isFinite));
+    assert.equal(Object.values(companion.userData.faces).filter(f => f.visible).length, 1);
+  }
+  pose(visitor.obj, 'walk', 1000);
+  const hat = visitor.obj.userData.witchHat;
+  visitor.obj.userData.head.rotation.y = .7;
+  assert.equal(hat.parent.rotation.y, .7);
+  costumes.update();
+  assert.equal(visitor.obj.userData.witchHat, hat, 'updates do not stack hats');
+  const costumeSkin = skin.map(mesh => mesh.material);
+  let disposed = 0;
+  costumeSkin.forEach(mat => mat.addEventListener('dispose', () => disposed++));
+  costumes.dispose();
+  assert.equal(visitor.obj.userData.witchHat, undefined);
+  assert.ok(desk.clawds.every(c => !c.userData.witchHat));
+  assert.equal(worker.userData.head.getObjectByName('halloween-zombie'), undefined);
+  assert.deepEqual(skin.map(mesh => mesh.material), originalMaterials);
+  assert.equal(disposed, 3);
+});
+
+test('costumes follow new and removed subagents, and restore skin without breaking an in-progress fade', async t => {
+  const { THREE, person, syncClawds, createHalloweenCostumes } = await modules(t);
+  const worker = person('same-seed'), untouched = person('same-seed');
+  const skinColor = untouched.userData.skin[0].material.color.clone();
+  const desk = { group: new THREE.Group(), worker: { obj: worker }, session: { provider: 'codex' }, clawds: [] };
+  const desks = new Map([['worker', desk]]), costumes = createHalloweenCostumes({ desks });
+  costumes.update();
+  assert.ok(untouched.userData.skin[0].material.color.equals(skinColor), 'shared skin materials stay untouched');
+  syncClawds(desk, Array.from({ length: 7 }, () => ({ provider: 'codex' })));
+  costumes.update();
+  assert.ok(desk.clawds.every(c => c.userData.witchHat));
+  assert.equal(desk.clawds[6].parent, worker, 'the head rider retains its anchor');
+  const removed = desk.clawds[0];
+  syncClawds(desk, [{ provider: 'claude' }]);
+  costumes.update();
+  assert.equal(removed.userData.witchHat, undefined);
+  assert.ok(desk.clawds[0].userData.witchHat);
+  const face = worker.userData.skin[0];
+  face.material = face.material.clone(); face.material.transparent = true; face.material.opacity = .4;
+  const fadingMaterial = face.material;
+  desks.clear();
+  costumes.update();
+  assert.equal(face.material, fadingMaterial);
+  assert.equal(face.material.opacity, .4);
+  assert.ok(face.material.color.equals(skinColor));
+  assert.equal(desk.clawds[0].userData.witchHat, undefined);
+  costumes.dispose();
+  fadingMaterial.dispose();
+});
 
 test('each subagent gets its own provider model, retaining positions and animations across polls', async t => {
   const { THREE, syncClawds, animateClawd } = await modules(t);
@@ -60,6 +136,18 @@ test('each subagent gets its own provider model, retaining positions and animati
   assert.equal(existing[1].parent, null);
   syncClawds(desk, []);
   assert.equal(desk.group.children.length, 0);
+});
+
+test('the first subagent expression change hides the original eyes for both providers', async t => {
+  const { THREE, syncClawds, animateClawd } = await modules(t);
+  t.mock.method(Math, 'random', () => .99);
+  const desk = { group: new THREE.Group(), worker: { obj: new THREE.Group() }, session: { provider: 'claude' }, clawds: [] };
+  syncClawds(desk, [{ provider: 'claude' }, { provider: 'codex' }]);
+  for (const companion of desk.clawds) {
+    animateClawd(companion, 1);
+    assert.equal(Object.values(companion.userData.faces).filter(f => f.visible).length, 1);
+    assert.equal(companion.userData.faces.dot.visible, true);
+  }
 });
 
 test('Codex parent supplies the default model and keeps the existing spot limit and head rider', async t => {
