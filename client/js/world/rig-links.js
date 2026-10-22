@@ -9,7 +9,7 @@ const ABOVE_HEAD = 3.4; // from a worker's feet; same height the name label hang
 const REBUILD_DISTANCE = .05; // re-trace an arc only once an end has moved this far
 const links = new THREE.Group(); scene.add(links);
 const linkMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .45, depthWrite: false });
-let shownKey = '', flights = []; // { from, to, curve, tube, ends, plane, offset }
+let shownKey = '', flights = []; // { from, to, curve, tube, ends, plane, progress, duration }
 
 function voxelPlane() {
   const g = new THREE.Group(), white = new THREE.MeshBasicMaterial({ color: 0xffffff }), wing = new THREE.MeshBasicMaterial({ color: CLAUDE_ORANGE });
@@ -29,7 +29,7 @@ function addFlight(from, to, i, total) {
   const tube = new THREE.Mesh(new THREE.BufferGeometry(), linkMat); tube.castShadow = false; links.add(tube);
   const ends = [0, 1].map(() => { const end = vox(links, linkMat, [.22, .22, .22], [0, 0, 0]); end.castShadow = false; return end; });
   const plane = voxelPlane(); links.add(plane);
-  flights.push({ from, to, curve, tube, ends, plane, offset: i / Math.max(1, total) });
+  flights.push({ from, to, curve, tube, ends, plane, progress: i / Math.max(1, total) });
 }
 
 // The arc hangs between the two heads, so it follows a worker who walks off for a break.
@@ -56,10 +56,12 @@ export function updateRigLinks(rigs) {
   pairs.forEach(([from, to], i) => addFlight(from, to, i, pairs.length));
 }
 
-export function flyPlanes(now) {
+// Progress accumulates frame by frame, so a stretching arc slows the plane down instead of making it jump ahead.
+export function flyPlanes(dt) {
   for (const f of flights) {
     traceArc(f);
-    const t = (now / f.duration + f.offset) % 1, point = f.curve.getPoint(t);
+    f.progress = (f.progress + dt * 1000 / f.duration) % 1;
+    const t = f.progress, point = f.curve.getPoint(t);
     f.plane.position.copy(point);
     f.plane.lookAt(point.clone().add(f.curve.getTangent(t)));
   }
