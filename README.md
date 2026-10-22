@@ -65,6 +65,35 @@ Remote Control이 켜진 **다른 PC의 세션**과 **claude.ai/code 클라우�
 - **⤢ 전체 보기**: 현재 시점을 유지한 채 지금 보고 있는 사무실 전체가 화면에 들어오도록 맞춥니다.
 - 카메라 쪽 벽은 심즈처럼 무릎 높이로 낮아져 안이 잘 보입니다. 마우스로 회전·확대할 수 있습니다.
 
+### 할로윈 이벤트
+- 매년 **10월 20일 00:00부터 11월 1일 23:59:59까지**, 브라우저의 현지 날짜를 기준으로 본사 사무실을 꾸밉니다. 화면을 켜 둔 채 날짜가 바뀌어도 자동으로 시작·종료됩니다.
+- 탕비실과 라운지 주변에는 둥둥 떠다니는 촛불, 벽에는 따뜻한 앵두조명이 달린 박쥐 가렌드가 나타납니다. 가렌드는 창문 사이의 뾰족한 꼭짓점에서 늘어지며, 카메라 앞의 벽이 내려갈 때 함께 숨겨집니다.
+- 웃는 잭오랜턴은 입구와 선반을 장식하며, 밤 테마에서는 주황색 광원으로 주변을 비춥니다.
+- 사무실 바깥의 귀여운 유령은 서서히 나타나 떠다니다 사라집니다. 운영체제의 동작 줄이기 설정을 사용하면 촛불과 유령은 정지 상태로 표시됩니다.
+- 사용자와 Claude·Codex 서브에이전트는 마녀모자를 쓰고, 작업 에이전트는 초록빛 피부와 머리 양옆 볼트가 있는 좀비로 변신합니다. 새로 등장하는 캐릭터에도 적용되며 이벤트가 끝나면 원래 모습으로 돌아옵니다. 캐릭터 분장은 원격·구름 사무실에도 적용됩니다.
+- 소품 참고: [떠다니는 촛불과 박쥐 장식](https://www.michaels.com/product/80-pcs-halloween-hanging-witch-hats-and-floating-candles-set-12-black-witch-hats-with-12-led-taper-candles-and-remote-56-3d-bat-wall-stickers-with-hanging-ropes-spooky-halloween-decorations-for-porch-yard-garden-door-tree-and-party-501470213559205890), [호박·박쥐·유령 가렌드](https://www.michaels.com/product/6-ft-halloween-willow-vine-garland-with-led-pumpkin-bat-ghost-lights-orange-purple-white-498088382097162240). 이미지를 다운로드하지 않고 기존 복셀 스타일로 구현합니다.
+
+#### 다른 계절 이벤트 추가하기
+
+`client/js/core/seasonal-events.js`의 `SeasonalEvent` 인터페이스를 따르는 정의를 `client/js/world/room.js`의 `createSeasonalEvents([...])` 목록에 추가합니다. `period`는 시작일과 종료일을 모두 포함하며, 12월→1월처럼 연도를 넘는 기간도 지원합니다. 크리스마스 소품 자체는 아직 등록되어 있지 않습니다.
+
+```js
+const christmasEvent = {
+  id: 'christmas',
+  period: { start: { month: 12, day: 20 }, end: { month: 1, day: 6 } }, // 예시 기간
+  create({ parent, walls, bounds, camera }) {
+    // parent: 방 Group, walls: 방향별 벽 Group, bounds: 현재 배치, camera: 카메라
+    // 장식 생성 후 아래 생명주기를 반환합니다.
+    return {
+      update(now) { /* 프레임 시간(ms)으로 애니메이션 갱신 */ },
+      dispose() { /* 장식 제거, 전용 재질 해제, 테마 광원 등록 해제 */ },
+    };
+  },
+};
+```
+
+방이 확장되면 기존 이벤트를 정리한 뒤 새 배치로 다시 생성합니다. `vox()`의 공유 geometry/material은 해제하지 않습니다. 이벤트 종료·시작과 연말 날짜 경계는 `npm test`로 검증합니다.
+
 ## 실행 방법
 
 ### 요구 사항
