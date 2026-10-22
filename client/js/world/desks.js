@@ -213,8 +213,9 @@ export function stepDesks(dt, now) {
     updateLaptopScreen(desk, now);
     stepWorker(desk, dt, now);
     if (desk.bubbleUntil <= now) desk.bubble.style.opacity = 0;
-    pin(desk.label, desk.worker.obj, 3.4);
-    pin(desk.bubble, desk.worker.obj, 4.3);
+    const hatSpace = desk.clawds.some(c => c.parent === desk.worker.obj && c.userData.witchHat) ? .55 : 0;
+    pin(desk.label, desk.worker.obj, 3.4 + hatSpace);
+    pin(desk.bubble, desk.worker.obj, 4.3 + hatSpace);
     desk.clawds.forEach(clawd => animateClawd(clawd, now));
     updateQuestionMark(desk.questionMark, desk.worker.obj, !desk.leaving && !desk.fading && desk.session.status === 'waiting', now);
   }
