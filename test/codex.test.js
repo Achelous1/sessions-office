@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseCodexTranscript, openThreadIds, createCodexReader } = require('../server/codex');
+const { parseCodexTranscript, openThreadIds, onlyWarnings, createCodexReader } = require('../server/codex');
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const CHILD = '22222222-2222-4222-8222-222222222222';
@@ -204,4 +204,10 @@ test('missing Codex installation is harmless; unavailable process detection is e
   assert.equal(list.length, 1);
   assert.equal(list[0].status, 'unknown');
   assert.match(list[0].statusNote, /최근|확인/);
+});
+
+test('lsof mount warnings do not hide that no Codex process is running', () => {
+  assert.equal(onlyWarnings(''), true);
+  assert.equal(onlyWarnings("lsof: WARNING: can't stat() overlay file system /var/lib/docker/x\n      Output information may be incomplete.\n"), true);
+  assert.equal(onlyWarnings('lsof: unknown option -F'), false);
 });
