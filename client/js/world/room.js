@@ -48,8 +48,8 @@ function plant(x, z, s = 1) {
 function buildFloors() {
   const { LX, PX, RX, back, front } = L;
   for (let x = PX; x < LX; x += 2) for (let z = back; z < front; z += 2) {
-    const light = ((x - PX) / 2 + (z - back) / 2) & 1;
-    vox(room, light ? 0xdedad2 : 0xc9c4ba, [2, .4, Math.min(2, front - z)], [x + 1, -.4, z + Math.min(1, (front - z) / 2)]);
+    const light = ((x - PX) / 2 + (z - back) / 2) & 1, w = Math.min(2, LX - x); // last column stops at the partition
+    vox(room, light ? 0xdedad2 : 0xc9c4ba, [w, .4, Math.min(2, front - z)], [x + w / 2, -.4, z + Math.min(1, (front - z) / 2)]);
   }
   for (let z = back, row = 0; z < front; z++, row++) for (let x = LX - (row % 2) * 2; x < RX; x += 4) {
     const x0 = Math.max(x, LX), x1 = Math.min(x + 4, RX);
