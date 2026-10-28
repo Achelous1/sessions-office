@@ -1,7 +1,8 @@
 // HTTP API + static client.
 //   GET  /api/sessions          live sessions (summaries): local, then remote PCs and cloud
 //   GET  /api/session/:id       one live session with its chat log
-//   GET  /api/session/:id/diff  uncommitted git changes in a live local session's working directory
+//   GET  /api/session/:id/diff  git changes in a live local session's working directory
+//                               (?view=all|worktree|<commit sha>&base=<branch>)
 //   POST /api/session/:id/fire  terminate a local session / archive a remote one
 //   GET  /api/history           past local sessions with a resume command
 //   GET  /api/rigs              OpenRig teams and delegation edges
@@ -13,7 +14,7 @@ const { terminate } = require('./processes');
 const { listRigs } = require('./rigs');
 const { serveStatic } = require('./static');
 const { codex } = require('./codex');
-const { workingTreeDiff } = require('./diff');
+const { sessionDiff } = require('./diff');
 
 const SESSION_ROUTE = /^\/api\/session\/([\w-]+)$/;
 const FIRE_ROUTE = /^\/api\/session\/([\w-]+)\/fire$/;
@@ -75,10 +76,11 @@ async function getSession(res, id) {
 }
 
 // Only sessions on this PC: a remote or cloud session's working directory is on another machine.
-async function getDiff(res, id) {
+async function getDiff(res, id, query) {
   const session = id.startsWith('codex-') ? (await codex.list()).find(s => s.id === id) : findLiveSession(id);
   if (!session) return sendJson(res, { error: isRemoteId(id) ? '원격·클라우드 세션의 변경 사항은 볼 수 없습니다' : 'not found' }, 404);
-  sendJson(res, await workingTreeDiff(session.cwd, session.src?.host ?? session.host));
+  const base = query.get('base');
+  sendJson(res, await sessionDiff(session.cwd, session.src?.host ?? session.host, { view: query.get('view') || 'all', base: base ?? undefined }));
 }
 
 async function handleRequest(req, res) {
@@ -91,7 +93,7 @@ async function handleRequest(req, res) {
     const fire = url.match(FIRE_ROUTE);
     if (fire) return await fireSession(req, res, fire[1]);
     const diff = url.match(DIFF_ROUTE);
-    if (diff) return await getDiff(res, diff[1]);
+    if (diff) return await getDiff(res, diff[1], new URLSearchParams(req.url.split('?')[1] ?? ''));
     const session = url.match(SESSION_ROUTE);
     if (session) return await getSession(res, session[1]);
     if (req.method === 'GET' && serveStatic(req, res, url)) return;

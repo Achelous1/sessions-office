@@ -58,7 +58,7 @@ details.tools div { font-family:ui-monospace, Menlo, monospace; font-size:11px; 
 #chat[hidden], #diff[hidden], #p-tabs[hidden] { display:none; }
 #diff { flex:1; overflow:auto; padding:12px 16px 40px; container-type:inline-size; }
 #diff .add { color:var(--add); } #diff .del { color:var(--del); }
-.dsummary { font-size:13px; margin-bottom:10px; }
+.dsummary { font-size:13px; padding-bottom:4px; }
 .dmeta { color:var(--muted); font-size:11px; word-break:break-all; }
 .diffstat { display:inline-flex; gap:1px; vertical-align:middle; }
 .diffstat i { width:7px; height:7px; border-radius:1px; background:var(--line); }
@@ -66,9 +66,25 @@ details.tools div { font-family:ui-monospace, Menlo, monospace; font-size:11px; 
 .dbody { display:flex; flex-direction:column; gap:12px; }
 @container (min-width: 720px) {
   .dbody { flex-direction:row; align-items:flex-start; }
-  .dtree { position:sticky; top:0; width:240px; flex:none; max-height:calc(100vh - 160px); overflow:auto; }
+  .dside { position:sticky; top:0; width:260px; flex:none; max-height:calc(100vh - 160px); overflow:auto; }
   .dfiles { flex:1; min-width:0; }
 }
+.dside { display:flex; flex-direction:column; gap:10px; }
+.drange { border:1px solid var(--line); border-radius:8px; padding:4px 0; font-size:12px; max-height:40vh; overflow:auto; }
+.drange .dtitle:not(:first-child) { margin-top:6px; padding-top:6px; border-top:1px solid var(--line); }
+.rbase { display:flex; align-items:center; gap:6px; padding:2px 10px 6px; color:var(--muted); font-size:11px; }
+.rbase select { flex:1; min-width:0; font:inherit; font-size:12px; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:1px 4px; }
+.rrow { display:flex; align-items:flex-start; gap:6px; padding:4px 10px; cursor:pointer; border-left:2px solid transparent; }
+.rrow:hover { background:var(--bubble); }
+.rrow.on { background:var(--bubble); border-left-color:var(--accent); }
+.rmain { flex:1; min-width:0; }
+.rsubject { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rsubject code { font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--muted); }
+.rsub { color:var(--muted); font-size:11px; word-break:break-word; }
+.csubject { display:block; font-size:14px; word-break:break-word; }
+.cbody { margin:4px 0; font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-word; color:var(--muted); }
+.dcount { margin-top:4px; }
+.dfiles > .empty { border:1px dashed var(--line); border-radius:8px; }
 .dtree { border:1px solid var(--line); border-radius:8px; padding:4px 0; font-size:12px; max-height:40vh; overflow:auto; }
 .dtitle { padding:2px 10px 4px; color:var(--muted); font-size:11px; }
 .dtree summary { cursor:pointer; padding:2px 8px; list-style:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
