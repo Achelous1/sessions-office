@@ -2,7 +2,7 @@
 //   GET  /api/sessions          live sessions (summaries): local, then remote PCs and cloud
 //   GET  /api/session/:id       one live session with its chat log
 //   GET  /api/session/:id/diff  git changes in a live local session's working directory
-//                               (?view=all|worktree|<commit sha>&base=<branch>)
+//                               (?view=worktree|all|<commit sha>&base=<branch>)
 //   POST /api/session/:id/fire  terminate a local session / archive a remote one
 //   GET  /api/history           past local sessions with a resume command
 //   GET  /api/rigs              OpenRig teams and delegation edges
@@ -80,7 +80,7 @@ async function getDiff(res, id, query) {
   const session = id.startsWith('codex-') ? (await codex.list()).find(s => s.id === id) : findLiveSession(id);
   if (!session) return sendJson(res, { error: isRemoteId(id) ? '원격·클라우드 세션의 변경 사항은 볼 수 없습니다' : 'not found' }, 404);
   const base = query.get('base');
-  sendJson(res, await sessionDiff(session.cwd, session.src?.host ?? session.host, { view: query.get('view') || 'all', base: base ?? undefined }));
+  sendJson(res, await sessionDiff(session.cwd, session.src?.host ?? session.host, { view: query.get('view') || 'worktree', base: base ?? undefined }));
 }
 
 async function handleRequest(req, res) {

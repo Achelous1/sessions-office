@@ -12,7 +12,7 @@ const MAX_BIG_FILES = 20, MAX_BIG_FILE_PATCH_BYTES = 512 * 1024, MAX_UNTRACKED_P
 const MAX_UNTRACKED = 100;
 const MAX_FILE_LINES = 2000; // lines of one file's patch sent to the page; counts stay exact
 const MAX_TOTAL_LINES = 20000;
-const MAX_COMMITS = 100, RECENT_COMMITS = 20, MAX_BRANCHES = 200, COMMIT_CACHE = 50;
+const MAX_COMMITS = 100, RECENT_COMMITS = 20, MAX_BRANCHES = 200, COMMIT_CACHE = 50, LOG_CACHE = 20;
 const MAX_COUNTED_FILE = 1024 * 1024, BINARY_SNIFF = 8000;
 const TRUNKS = ['main', 'master', 'develop', 'development', 'dev', 'trunk'];
 const TRUNK_DEFAULTS = new Set(['main', 'master']);
@@ -294,8 +294,20 @@ async function pickBase(root, branch, names, remoteHead) {
   return best;
 }
 
-// git log with per-commit +/- (a merge counts nothing, like git log's default numstat)
-async function listCommits(root, range) {
+const logCache = new Map(); // keyed by resolved shas: a range's commits only change when HEAD or the base moves
+
+// git log with per-commit +/- (a merge counts nothing, like git log's default numstat). The numstat diffs every
+// commit, which is slow for big ones, so a range is listed once until HEAD or its base moves.
+async function listCommits(root, range, key) {
+  const cacheKey = root + '\0' + key;
+  if (logCache.has(cacheKey)) return logCache.get(cacheKey);
+  const commits = await logCommits(root, range);
+  if (logCache.size >= LOG_CACHE) logCache.delete(logCache.keys().next().value);
+  logCache.set(cacheKey, commits);
+  return commits;
+}
+
+async function logCommits(root, range) {
   const out = await git(root, ['log', `-n${MAX_COMMITS}`, '--numstat', '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%aI', range, '--']);
   return out.split('\x1e').filter(s => s.trim()).map(chunk => {
     const [header, ...rest] = chunk.split('\n');
@@ -325,11 +337,12 @@ async function commitDiff(root, sha) {
   return result;
 }
 
-// What the 변경 사항 tab shows for one session. view: 'all' (base -> working tree, the whole branch),
-// 'worktree' (HEAD -> working tree) or a commit sha; base: a branch name to override the guess.
+// What the 변경 사항 tab shows for one session. view: 'worktree' (HEAD -> working tree, the default: cheap even when
+// the branch is far from its base), 'all' (base -> working tree, the whole branch) or a commit sha; base: a branch
+// name to override the guess. totals.all is only counted while 'all' is shown, since that diff can be huge.
 // { root, branch, base, branches, commits, commitsInBase, totals, view, commit, files, additions, deletions, skippedUntracked }
 // or { error } when cwd is not a git work tree.
-async function sessionDiff(cwd, host, { view = 'all', base: requestedBase } = {}) {
+async function sessionDiff(cwd, host, { view = 'worktree', base: requestedBase } = {}) {
   if (!cwd) return { error: '작업 경로를 알 수 없습니다' };
   const dir = localPath(cwd, host);
   let root;
@@ -349,30 +362,34 @@ async function sessionDiff(cwd, host, { view = 'all', base: requestedBase } = {}
     if (base && !base.mergeBase) base = null; // unrelated histories
   }
   const commitsInBase = !base?.ahead; // nothing of its own: show recent history instead
-  const [commits, worktreeStats, allStats] = await Promise.all([
-    head ? listCommits(root, commitsInBase ? 'HEAD' : `${base.mergeBase}..HEAD`).then(c => commitsInBase ? c.slice(0, RECENT_COMMITS) : c) : [],
-    statsAgainst(root, head || EMPTY_TREE, untracked),
-    base ? statsAgainst(root, base.mergeBase, untracked) : null,
-  ]);
+  const range = commitsInBase ? 'HEAD' : `${base.mergeBase}..HEAD`;
+  const commitList = head ? listCommits(root, range, commitsInBase ? head : `${base.mergeBase}..${head}`)
+    .then(c => commitsInBase ? c.slice(0, RECENT_COMMITS) : c) : Promise.resolve([]);
 
-  let shown;
-  if (SHA.test(view) && head) shown = await commitDiff(root, view).catch(() => null);
-  if (!shown) {
-    view = view === 'worktree' || !base ? 'worktree' : 'all'; // unknown commits fall back to the default
+  let shown = SHA.test(view) && head ? await commitDiff(root, view).catch(() => null) : null;
+  if (shown) view = shown.commit.sha;
+  else {
+    view = view === 'all' && base ? 'all' : 'worktree'; // unknown commits fall back to the default
     const from = view === 'all' ? base.mergeBase : head || EMPTY_TREE;
     const [tracked, newFiles] = await Promise.all([readPatch(root, [from]), untrackedFiles(root, untracked)]);
     shown = { commit: null, files: capLines([...tracked, ...newFiles]) };
-  } else view = shown.commit.sha;
+  }
   const files = [...shown.files].sort((a, b) => a.path.localeCompare(b.path));
+  const additions = files.reduce((n, f) => n + f.additions, 0), deletions = files.reduce((n, f) => n + f.deletions, 0);
+  const skippedUntracked = Math.max(0, untracked.length - MAX_UNTRACKED);
+  const shownStats = { files: files.length + skippedUntracked, additions, deletions }; // the range on screen counts itself
+  const [commits, worktreeStats] = await Promise.all([
+    commitList,
+    view === 'worktree' ? shownStats : statsAgainst(root, head || EMPTY_TREE, untracked),
+  ]);
+  const allStats = view === 'all' ? shownStats : null;
   return {
     root: path.basename(root), branch: branch || (head ? head.slice(0, 7) : ''),
     base: base && { ref: base.ref, ahead: base.ahead, mergeBase: base.mergeBase.slice(0, 7) },
     branches: names, commits, commitsInBase,
     totals: { all: allStats, worktree: worktreeStats },
     view, commit: shown.commit, files,
-    additions: files.reduce((n, f) => n + f.additions, 0),
-    deletions: files.reduce((n, f) => n + f.deletions, 0),
-    skippedUntracked: Math.max(0, untracked.length - MAX_UNTRACKED),
+    additions, deletions, skippedUntracked,
   };
 }
 

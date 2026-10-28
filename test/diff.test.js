@@ -92,7 +92,11 @@ test('sessionDiff branch: guesses the nearest trunk, lists its commits and shows
   write('f.txt', 'one\ntwo\nthree\n'); git('commit', '-qam', 'feat: two', '-m', 'details');
   write('a.txt', 'base\ndev\nwip\n'); write('n.md', 'new\n');
 
-  const all = await sessionDiff(dir, 'linux');
+  const first = await sessionDiff(dir, 'linux'); // opens on the cheap view; the whole branch is counted on demand
+  assert.deepEqual([first.view, first.totals.all, first.base.ref], ['worktree', null, 'develop']);
+  assert.deepEqual(paths(first), [['a.txt', 'modified', 1, 0], ['n.md', 'added', 1, 0]]);
+
+  const all = await sessionDiff(dir, 'linux', { view: 'all' });
   assert.equal(all.view, 'all');
   assert.deepEqual([all.base.ref, all.base.ahead], ['develop', 2]); // develop is nearer than main
   assert.equal(all.commitsInBase, false);
@@ -105,12 +109,14 @@ test('sessionDiff branch: guesses the nearest trunk, lists its commits and shows
   assert.equal(commit.commit.message, 'feat: two\n\ndetails');
   assert.deepEqual(paths(commit), [['f.txt', 'modified', 2, 0]]);
 
-  const fromMain = await sessionDiff(dir, 'linux', { base: 'main' });
+  assert.deepEqual(all.totals.worktree, { files: 2, additions: 2, deletions: 0 });
+
+  const fromMain = await sessionDiff(dir, 'linux', { view: 'all', base: 'main' });
   assert.deepEqual([fromMain.base.ref, fromMain.commits.length], ['main', 3]);
   const none = await sessionDiff(dir, 'linux', { base: '' });
   assert.deepEqual([none.base, none.view, none.commitsInBase], [null, 'worktree', true]);
   const unknown = await sessionDiff(dir, 'linux', { view: 'deadbeef' }); // a commit that doesn't exist falls back
-  assert.equal(unknown.view, 'all');
+  assert.equal(unknown.view, 'worktree');
 });
 
 test('sessionDiff huge changes: no maxBuffer error, small files keep their diff, counts stay exact', async t => {
@@ -124,7 +130,7 @@ test('sessionDiff huge changes: no maxBuffer error, small files keep their diff,
   git('add', '.'); git('commit', '-qm', 'big files');
   write('z.txt', 'tail\n'); git('add', '.'); git('commit', '-qm', 'small file after the big ones');
 
-  const d = await sessionDiff(git('rev-parse', '--show-toplevel').trim(), 'linux');
+  const d = await sessionDiff(git('rev-parse', '--show-toplevel').trim(), 'linux', { view: 'all' });
   assert.equal(d.error, undefined);
   const byPath = Object.fromEntries(d.files.map(f => [f.path, f]));
   assert.deepEqual(Object.keys(byPath).sort(), ['gen/data.txt', 'min.js', 'z.txt']);
