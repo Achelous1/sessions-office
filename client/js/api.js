@@ -19,9 +19,12 @@ export async function fetchSession(id) {
   return res.ok ? res.json() : null;
 }
 
-// uncommitted git changes in the session's working directory: { files, additions, deletions, ... } or { error }
-export async function fetchDiff(id) {
-  return (await fetch(`/api/session/${id}/diff`)).json();
+// git changes in the session's working directory (see server/diff.js): view = 'all' | 'worktree' | commit sha,
+// base = branch to compare against ('' for none, undefined to guess). { files, commits, ... } or { error }
+export async function fetchDiff(id, { view, base } = {}) {
+  const query = new URLSearchParams({ view: view ?? 'all' });
+  if (base !== undefined) query.set('base', base);
+  return (await fetch(`/api/session/${id}/diff?${query}`)).json();
 }
 
 // Terminates the session's process. Throws with the server's reason on failure.
