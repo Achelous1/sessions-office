@@ -4,13 +4,17 @@ import { clip } from '../core/overlay.js';
 import { desks } from '../world/state.js';
 import { renderMarkdown } from './markdown.js';
 import { agentEnvironment, el } from './labels.js';
+import { loadDiff, resetDiff } from './diff-view.js';
 
 const MIN_WIDTH = 320, MARGIN = 80, STICK_TO_BOTTOM_PX = 40;
 const WIDTH_KEY = 'panelWidth';
+const DIFF_REFRESH_MS = 5000, DIFF_BADGE_REFRESH_MS = 30000; // git runs per refresh, so slower than the 2s poll
 
-const panel = document.getElementById('panel'), chat = document.getElementById('chat');
+const panel = document.getElementById('panel'), chat = document.getElementById('chat'), diff = document.getElementById('diff');
+const tabs = document.getElementById('p-tabs'), diffCount = document.getElementById('diff-count');
 let selectedId = null;
 let renderedKey = ''; // what the chat log currently shows, so unchanged polls keep scroll + open tool groups
+let view = 'chat', diffAt = 0;
 
 export const selectedSession = () => selectedId;
 
@@ -67,13 +71,35 @@ function renderMessages(messages) {
   return out;
 }
 
+function showView(next) {
+  view = next;
+  for (const b of tabs.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === view);
+  chat.hidden = view !== 'chat';
+  diff.hidden = view !== 'diff';
+}
+
+// remote and cloud sessions work on another machine, so only local ones have a diff to show
+async function refreshDiff(s, force) {
+  tabs.hidden = !!s.remote;
+  if (s.remote) return showView('chat');
+  if (!force && Date.now() - diffAt < (view === 'diff' ? DIFF_REFRESH_MS : DIFF_BADGE_REFRESH_MS)) return;
+  diffAt = Date.now();
+  const d = await loadDiff(s.id, () => selectedId === s.id);
+  if (d) diffCount.textContent = d.files?.length ? String(d.files.length) : '';
+}
+
 // refresh = a poll update of the open session (keeps the reader's scroll position unless they were at the bottom)
 export async function openChat(id, refresh = false) {
-  if (!refresh) renderedKey = '';
+  if (!refresh) {
+    renderedKey = '';
+    resetDiff();
+    diffCount.textContent = '';
+  }
   selectedId = id;
   const s = await fetchSession(id);
-  if (!s) return;
+  if (!s || selectedId !== id) return;
   renderHeader(s);
+  refreshDiff(s, !refresh);
   const key = id + s.chat.length + (s.chat.at(-1)?.ts ?? '');
   if (key !== renderedKey) {
     renderedKey = key;
@@ -103,5 +129,9 @@ function initResizeGrip() {
 
 export function initChatPanel() {
   document.getElementById('close').onclick = closeChat;
+  for (const b of tabs.querySelectorAll('button')) b.onclick = () => {
+    showView(b.dataset.view);
+    if (view === 'diff' && selectedId) { diffAt = 0; refreshChat(); }
+  };
   initResizeGrip();
 }
