@@ -22,6 +22,8 @@
 </aside>
 <div id="overlay"></div>
 <aside id="panel"><div id="grip" title="드래그해서 너비 조절"></div><button id="close" aria-label="닫기">×</button>
-  <header><h2 id="p-title"></h2><div class="meta" id="p-meta"></div></header><div id="chat"></div></aside>
+  <header><h2 id="p-title"></h2><div class="meta" id="p-meta"></div></header>
+  <div class="tabs" id="p-tabs"><button data-view="chat" class="on">대화</button><button data-view="diff">변경 사항 <span id="diff-count"></span></button></div>
+  <div id="chat"></div><div id="diff" hidden></div></aside>
 </body>
 </html>

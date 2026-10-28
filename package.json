@@ -1,6 +1,6 @@
 {
   "name": "sessions-office",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "license": "Unlicense",
   "description": "Voxel office that shows Claude Code and Codex sessions",
