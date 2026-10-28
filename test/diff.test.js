@@ -112,3 +112,26 @@ test('sessionDiff branch: guesses the nearest trunk, lists its commits and shows
   const unknown = await sessionDiff(dir, 'linux', { view: 'deadbeef' }); // a commit that doesn't exist falls back
   assert.equal(unknown.view, 'all');
 });
+
+test('sessionDiff huge changes: no maxBuffer error, small files keep their diff, counts stay exact', async t => {
+  if (!hasGit()) return t.skip('git not installed');
+  const { git, write } = tempRepo(t);
+  write('a.txt', 'a\n'); git('add', '.'); git('commit', '-qm', 'init');
+  git('checkout', '-qb', 'feature');
+  const generated = Array.from({ length: 3000 }, (_, i) => `row ${i}`).join('\n') + '\n';
+  write('gen/data.txt', generated); // many lines: read on its own with a small cap
+  write('min.js', 'x'.repeat(9 * 1024 * 1024) + '\n'); // one line longer than the whole patch budget
+  git('add', '.'); git('commit', '-qm', 'big files');
+  write('z.txt', 'tail\n'); git('add', '.'); git('commit', '-qm', 'small file after the big ones');
+
+  const d = await sessionDiff(git('rev-parse', '--show-toplevel').trim(), 'linux');
+  assert.equal(d.error, undefined);
+  const byPath = Object.fromEntries(d.files.map(f => [f.path, f]));
+  assert.deepEqual(Object.keys(byPath).sort(), ['gen/data.txt', 'min.js', 'z.txt']);
+  assert.deepEqual([byPath['gen/data.txt'].additions, byPath['gen/data.txt'].truncated], [3000, true]);
+  assert.equal(byPath['gen/data.txt'].hunks[0].lines.length, 2000);
+  assert.deepEqual([byPath['min.js'].additions, byPath['min.js'].status, byPath['min.js'].truncated], [1, 'added', true]);
+  assert.deepEqual([byPath['z.txt'].truncated, byPath['z.txt'].hunks[0].lines.map(l => l.text)], [false, ['tail']]);
+  assert.deepEqual(d.totals.all, { files: 3, additions: 3002, deletions: 0 });
+  assert.ok(JSON.stringify(d).length < 2 * 1024 * 1024);
+});
