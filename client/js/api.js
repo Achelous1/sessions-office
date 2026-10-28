@@ -19,6 +19,11 @@ export async function fetchSession(id) {
   return res.ok ? res.json() : null;
 }
 
+// uncommitted git changes in the session's working directory: { files, additions, deletions, ... } or { error }
+export async function fetchDiff(id) {
+  return (await fetch(`/api/session/${id}/diff`)).json();
+}
+
 // Terminates the session's process. Throws with the server's reason on failure.
 export async function fireSession(id) {
   // the custom header makes the request non-simple, so other websites can't send it (see server/routes.js)
