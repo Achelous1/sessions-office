@@ -3,10 +3,12 @@
 // Read-only: never touches the index or the work tree.
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const GIT_TIMEOUT_MS = 8000;
-const MAX_OUTPUT = 32 * 1024 * 1024;
+const MAX_OUTPUT = 32 * 1024 * 1024; // for listings; patches are read with a cap instead (readPatch)
+const MAX_PATCH_BYTES = 8 * 1024 * 1024, MAX_PATCH_PASSES = 3, MAX_RETRY_PATHS = 500; // far more than the page shows
+const MAX_BIG_FILES = 20, MAX_BIG_FILE_PATCH_BYTES = 512 * 1024, MAX_UNTRACKED_PATCH_BYTES = 512 * 1024; // enough for MAX_FILE_LINES usual lines
 const MAX_UNTRACKED = 100;
 const MAX_FILE_LINES = 2000; // lines of one file's patch sent to the page; counts stay exact
 const MAX_TOTAL_LINES = 20000;
@@ -29,6 +31,32 @@ function git(cwd, args, okCodes = [0]) {
   });
 }
 
+// Reads at most maxBytes of a git command's output, then stops it, so a huge patch (a generated file, a dump)
+// costs no more than the part the page can show. { text, cut } where cut = output was longer.
+function gitHead(cwd, args, maxBytes, okCodes = [0]) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['-C', cwd, '-c', 'core.quotepath=off', ...args], { env: GIT_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks = [];
+    let size = 0, cut = false, stderr = '';
+    const timer = setTimeout(() => child.kill(), GIT_TIMEOUT_MS);
+    child.stdout.on('data', chunk => {
+      if (cut) return;
+      chunks.push(chunk);
+      size += chunk.length;
+      if (size >= maxBytes) { cut = true; child.kill(); }
+    });
+    child.stderr.on('data', chunk => { if (stderr.length < 4096) stderr += chunk; });
+    child.on('error', e => { clearTimeout(timer); reject(e); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (!cut && !okCodes.includes(code)) return reject(new Error(stderr.trim() || `git exited with ${code ?? 'a timeout'}`));
+      let text = Buffer.concat(chunks).subarray(0, maxBytes).toString('utf8');
+      if (cut) text = text.slice(0, text.lastIndexOf('\n') + 1); // drop the line (and character) cut in half
+      resolve({ text, cut });
+    });
+  });
+}
+
 // A Windows-side session read from WSL records C:\path; git in WSL sees it as /mnt/c/path.
 function localPath(cwd, host) {
   if (host !== 'win' || process.platform === 'win32') return cwd;
@@ -47,7 +75,7 @@ function parseDiff(text) {
   let file = null, hunk = null, oldLine = 0, newLine = 0;
   for (const line of text.split('\n')) {
     if (line.startsWith('diff --git ')) {
-      file = { path: null, oldPath: null, status: 'modified', additions: 0, deletions: 0, binary: false, hunks: [], lines: 0 };
+      file = { path: null, oldPath: null, status: 'modified', additions: 0, deletions: 0, binary: false, hunks: [], lines: 0, truncated: false };
       const names = /^diff --git (?:"?a\/)(.+?)"? (?:"?b\/)(.+?)"?$/.exec(line);
       if (names) { file.oldPath = names[1]; file.path = names[2]; }
       files.push(file);
@@ -93,7 +121,7 @@ function parseDiff(text) {
 function capLines(files) {
   let total = 0;
   for (const f of files) {
-    f.truncated = f.lines > MAX_FILE_LINES;
+    f.truncated ||= f.lines > MAX_FILE_LINES;
     if (total >= MAX_TOTAL_LINES) { f.hunks = []; f.truncated = f.lines > 0; }
     total += Math.min(f.lines, MAX_FILE_LINES);
     delete f.lines;
@@ -103,26 +131,109 @@ function capLines(files) {
 
 const untrackedNames = async root => (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
 
-async function untrackedDiffs(root, names) {
-  const shown = names.slice(0, MAX_UNTRACKED);
-  const patches = await Promise.all(shown.map(name =>
-    git(root, ['diff', '--no-color', '--no-ext-diff', '--no-index', '--', '/dev/null', name], [0, 1]).catch(() => '')));
-  return patches.join('\n');
+// lines of one new file as git counts them (0 for binary)
+const newFileLines = async (root, name) =>
+  +(await git(root, ['diff', '--no-index', '--numstat', '--', '/dev/null', name], [0, 1]).catch(() => '')).split('\t')[0] || 0;
+
+async function untrackedFiles(root, names) {
+  const lists = await Promise.all(names.slice(0, MAX_UNTRACKED).map(async name => {
+    const args = ['diff', '--no-color', '--no-ext-diff', '--no-index', '--', '/dev/null', name];
+    const { text, cut } = await gitHead(root, args, MAX_UNTRACKED_PATCH_BYTES, [0, 1]).catch(() => ({ text: '', cut: false }));
+    const files = parseDiff(text);
+    if (cut && files[0]) Object.assign(files[0], { truncated: true, additions: await newFileLines(root, name) });
+    return files;
+  }));
+  return lists.flat();
 }
 
 // Line counts of new files, read directly: one git process per file on every refresh would be too many.
-function untrackedLines(root, names) {
+// Files too big to read every few seconds ask git instead.
+async function untrackedLines(root, names) {
   let lines = 0;
   for (const name of names.slice(0, MAX_UNTRACKED)) {
     try {
       const file = path.join(root, name);
-      if (fs.statSync(file).size > MAX_COUNTED_FILE) continue;
+      if (fs.statSync(file).size > MAX_COUNTED_FILE) { lines += await newFileLines(root, name); continue; }
       const text = fs.readFileSync(file);
       if (!text.length || text.subarray(0, BINARY_SNIFF).includes(0)) continue;
       lines += text.toString('utf8').split('\n').length - (text.at(-1) === 0x0a ? 1 : 0);
     } catch {}
   }
   return lines;
+}
+
+const STATUS_LETTER = { A: 'added', C: 'added', D: 'deleted', R: 'renamed' };
+
+// `git diff -z --numstat` -> [{ path, oldPath, additions, deletions, binary }]; a rename is "a\td\t\0old\0new\0"
+function parseNumstatZ(text) {
+  const parts = text.split('\0'), out = [];
+  for (let i = 0; i < parts.length; i++) {
+    const m = /^(-|\d+)\t(-|\d+)\t([\s\S]*)$/.exec(parts[i]);
+    if (!m) continue;
+    let file = m[3], oldPath = null;
+    if (file === '') { oldPath = parts[++i]; file = parts[++i]; }
+    out.push({ path: file, oldPath, binary: m[1] === '-', additions: +m[1] || 0, deletions: +m[2] || 0 });
+  }
+  return out;
+}
+
+// `git diff -z --name-status` -> Map(path -> status); a rename or copy is "R100\0old\0new\0"
+function parseNameStatusZ(text) {
+  const parts = text.split('\0'), out = new Map();
+  for (let i = 0; i < parts.length; i++) {
+    const letter = parts[i][0];
+    if (!letter) continue;
+    if (letter === 'R' || letter === 'C') i++;
+    out.set(parts[++i], STATUS_LETTER[letter] ?? 'modified');
+  }
+  return out;
+}
+
+const literal = n => [n.oldPath, n.path].filter(Boolean).map(p => ':(literal)' + p);
+
+// Everything but the long files, within MAX_PATCH_BYTES per read. A read cut short (say, by a minified file of one
+// endless line) gives up on the file it stopped in and reads again from the files it never reached.
+async function readRest(root, diff, pending, pathspec) {
+  const files = [];
+  for (let pass = 0; pass < MAX_PATCH_PASSES && pending.length; pass++) {
+    const read = await gitHead(root, [...diff, ...pathspec], MAX_PATCH_BYTES);
+    const parsed = parseDiff(read.text);
+    files.push(...parsed);
+    if (!read.cut) break;
+    if (parsed.length) parsed.at(-1).truncated = true;
+    const seen = new Set(parsed.map(f => f.path));
+    pending = pending.filter(n => !seen.has(n.path));
+    pathspec = pending.slice(0, MAX_RETRY_PATHS).flatMap(literal);
+  }
+  return files;
+}
+
+// The patch of a range. Files too long to show in full (by numstat) are read on their own with a small cap, so one
+// generated file can't use up the budget of the rest; whatever the main read still can't reach is listed with exact
+// counts but no diff, so the tree and the totals stay complete.
+async function readPatch(root, range) {
+  const diff = ['diff', '--no-color', '--no-ext-diff', '-M', ...range, '--'];
+  const counts = await git(root, ['diff', '-z', '-M', '--numstat', ...range]).then(parseNumstatZ);
+  const big = counts.filter(n => n.additions + n.deletions > MAX_FILE_LINES).slice(0, MAX_BIG_FILES);
+  const exclude = big.flatMap(n => [n.oldPath, n.path].filter(Boolean).map(p => ':(exclude,literal)' + p));
+  const [files, alone] = await Promise.all([
+    readRest(root, diff, counts.filter(n => !big.includes(n)), ['.', ...exclude]),
+    Promise.all(big.map(n => gitHead(root, [...diff, ...literal(n)], MAX_BIG_FILE_PATCH_BYTES))),
+  ]);
+  for (const read of alone) {
+    const parsed = parseDiff(read.text);
+    if (read.cut && parsed.length) parsed.at(-1).truncated = true;
+    files.push(...parsed);
+  }
+  const byPath = new Map(files.map(f => [f.path, f]));
+  const missing = counts.filter(n => !byPath.has(n.path));
+  const statuses = missing.length ? await git(root, ['diff', '-z', '-M', '--name-status', ...range]).then(parseNameStatusZ) : new Map();
+  for (const n of counts) {
+    const f = byPath.get(n.path);
+    if (f) Object.assign(f, { additions: n.additions, deletions: n.deletions, binary: f.binary || n.binary });
+    else files.push({ ...n, status: statuses.get(n.path) ?? (n.oldPath ? 'renamed' : 'modified'), hunks: [], lines: 0, truncated: true });
+  }
+  return files;
 }
 
 // "added\tdeleted\tpath" lines ("-" for binary) -> { files, additions, deletions }
@@ -142,7 +253,7 @@ function sumNumstat(text) {
 async function statsAgainst(root, rev, untracked) {
   const stats = sumNumstat(await git(root, ['diff', '--numstat', '-M', rev]));
   stats.files += untracked.length;
-  stats.additions += untrackedLines(root, untracked);
+  stats.additions += await untrackedLines(root, untracked);
   return stats;
 }
 
@@ -200,14 +311,14 @@ async function commitDiff(root, sha) {
   const key = root + full;
   if (commitCache.has(key)) return commitCache.get(key);
   const parent = await git(root, ['rev-parse', '--verify', '--quiet', `${full}^`]).then(s => s.trim()).catch(() => '');
-  const [patch, meta] = await Promise.all([
-    git(root, ['diff', '--no-color', '--no-ext-diff', '-M', parent || EMPTY_TREE, full]),
+  const [patchFiles, meta] = await Promise.all([
+    readPatch(root, [parent || EMPTY_TREE, full]),
     git(root, ['show', '-s', '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%P%x1f%B', full]),
   ]);
   const [, short, author, date, parents, message] = meta.split('\x1f');
   const result = {
     commit: { sha: full, short, author, date, merge: parents.trim().split(' ').length > 1, message: message.trim() },
-    files: capLines(parseDiff(patch)),
+    files: capLines(patchFiles),
   };
   if (commitCache.size >= COMMIT_CACHE) commitCache.delete(commitCache.keys().next().value);
   commitCache.set(key, result);
@@ -249,11 +360,8 @@ async function sessionDiff(cwd, host, { view = 'all', base: requestedBase } = {}
   if (!shown) {
     view = view === 'worktree' || !base ? 'worktree' : 'all'; // unknown commits fall back to the default
     const from = view === 'all' ? base.mergeBase : head || EMPTY_TREE;
-    const [tracked, newFiles] = await Promise.all([
-      git(root, ['diff', '--no-color', '--no-ext-diff', '-M', from]),
-      untrackedDiffs(root, untracked),
-    ]);
-    shown = { commit: null, files: capLines(parseDiff(tracked + '\n' + newFiles)) };
+    const [tracked, newFiles] = await Promise.all([readPatch(root, [from]), untrackedFiles(root, untracked)]);
+    shown = { commit: null, files: capLines([...tracked, ...newFiles]) };
   } else view = shown.commit.sha;
   const files = [...shown.files].sort((a, b) => a.path.localeCompare(b.path));
   return {
