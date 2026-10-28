@@ -156,10 +156,11 @@ function baseSelect(d) {
 function renderRanges(d) {
   const nav = el('nav', 'drange');
   nav.append(el('div', 'dtitle', '보기'), baseSelect(d));
-  if (d.base) {
-    nav.append(rangeRow(el('b', '', '전체 변경'), `${d.base.ref}에서 갈라진 뒤 · 커밋 ${d.base.ahead}개 + 작업 트리`, d.totals.all, 'all', d));
-  }
   nav.append(rangeRow(el('b', '', '커밋하지 않은 변경'), `HEAD 대비 · 파일 ${d.totals.worktree.files}개`, d.totals.worktree, 'worktree', d));
+  if (d.base) { // counted only while shown: a branch far from its base makes this diff heavy
+    const sub = `${d.base.ref}에서 갈라진 뒤 · 커밋 ${d.base.ahead}개 + 작업 트리` + (d.totals.all ? '' : ' · 클릭하면 계산합니다');
+    nav.append(rangeRow(el('b', '', '전체 변경'), sub, d.totals.all, 'all', d));
+  }
   if (d.commits.length) {
     nav.append(el('div', 'dtitle', d.commitsInBase ? `최근 커밋 ${d.commits.length}개${d.base ? ` (${d.base.ref}에 이미 포함)` : ''}` : `이 브랜치의 커밋 ${d.commits.length}개`));
     for (const c of d.commits) {
@@ -247,7 +248,7 @@ export function resetDiff() {
 // Loads (or refreshes) the open session's diff in the view the reader picked; onLoad gets each result, e.g. for
 // the tab's file count. Unchanged diffs keep scroll and folds.
 export function loadDiff(id, isCurrent, onLoad) {
-  if (current?.id !== id) current = { id, view: 'all', base: undefined };
+  if (current?.id !== id) current = { id, view: 'worktree', base: undefined };
   Object.assign(current, { isCurrent, onLoad });
   return load();
 }
