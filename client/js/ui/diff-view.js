@@ -1,5 +1,5 @@
-// "변경 사항" tab of the chat panel: the session's uncommitted git changes, like GitHub's "Files changed" —
-// a file tree with per-file +/- counts, then each file's diff with line numbers.
+// "변경 사항" tab of the chat panel, like a GitHub PR: pick the whole branch since its base, the uncommitted work
+// or one commit, then see a file tree with per-file +/- counts and each file's diff with line numbers.
 import { fetchDiff } from '../api.js';
 import { el } from './labels.js';
 
@@ -119,35 +119,113 @@ function fileSection(f, autoOpen) {
   return section;
 }
 
+const MINUTE = 60000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
+function ago(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (ms < HOUR) return `${Math.max(1, Math.round(ms / MINUTE))}분 전`;
+  if (ms < DAY) return `${Math.round(ms / HOUR)}시간 전`;
+  if (ms < 30 * DAY) return `${Math.round(ms / DAY)}일 전`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function statCounts(stats) {
+  return stats ? counts({ additions: stats.additions, deletions: stats.deletions }) : el('span');
+}
+
+// one choice in the 보기 list: the whole branch, uncommitted work, or a single commit
+function rangeRow(label, sub, stats, view, d) {
+  const row = el('div', 'rrow' + (d.view === view ? ' on' : ''));
+  const main = el('div', 'rmain');
+  main.append(label, el('div', 'rsub', sub));
+  row.append(main, statCounts(stats));
+  row.onclick = () => choose({ view });
+  return row;
+}
+
+function baseSelect(d) {
+  const wrap = el('label', 'rbase', '기준 ');
+  const picker = el('select');
+  picker.append(new Option('없음', ''), ...d.branches.map(name => new Option(name, name)));
+  picker.value = d.base?.ref ?? '';
+  picker.title = '전체 변경을 어느 브랜치와 비교할지 고릅니다. 처음에는 가장 가까운 main·develop 등을 자동으로 고릅니다';
+  picker.onchange = () => choose({ base: picker.value, view: picker.value ? 'all' : 'worktree' });
+  wrap.append(picker);
+  return wrap;
+}
+
+function renderRanges(d) {
+  const nav = el('nav', 'drange');
+  nav.append(el('div', 'dtitle', '보기'), baseSelect(d));
+  if (d.base) {
+    nav.append(rangeRow(el('b', '', '전체 변경'), `${d.base.ref}에서 갈라진 뒤 · 커밋 ${d.base.ahead}개 + 작업 트리`, d.totals.all, 'all', d));
+  }
+  nav.append(rangeRow(el('b', '', '커밋하지 않은 변경'), `HEAD 대비 · 파일 ${d.totals.worktree.files}개`, d.totals.worktree, 'worktree', d));
+  if (d.commits.length) {
+    nav.append(el('div', 'dtitle', d.commitsInBase ? `최근 커밋 ${d.commits.length}개${d.base ? ` (${d.base.ref}에 이미 포함)` : ''}` : `이 브랜치의 커밋 ${d.commits.length}개`));
+    for (const c of d.commits) {
+      const label = el('span', 'rsubject');
+      label.append(el('code', '', c.short), ' ', c.subject);
+      const row = rangeRow(label, `${c.author} · ${ago(c.date)}`, c, c.sha, d);
+      row.title = `${c.short} ${c.subject}\n${c.author} · ${new Date(c.date).toLocaleString()}`;
+      nav.append(row);
+    }
+  }
+  return nav;
+}
+
+function summary(d) {
+  const head = el('div', 'dsummary');
+  if (d.commit) {
+    const [subject, ...body] = d.commit.message.split('\n');
+    head.append(el('b', 'csubject', subject));
+    if (body.join('\n').trim()) head.append(el('pre', 'cbody', body.join('\n').trim()));
+    head.append(el('div', 'dmeta', `${d.commit.short} · ${d.commit.author} · ${new Date(d.commit.date).toLocaleString()}` +
+      (d.commit.merge ? ' · 머지 커밋 (첫 번째 부모 대비)' : '')));
+  } else {
+    head.append(el('b', '', d.view === 'all' ? '브랜치 전체 변경' : '커밋하지 않은 변경'));
+    head.append(el('div', 'dmeta', `${d.root}${d.branch ? ` · ${d.branch}` : ''} · ` + (d.view === 'all'
+      ? `${d.base.ref}(${d.base.mergeBase})에서 갈라진 뒤의 커밋과 작업 트리 (추적 안 된 파일 포함)`
+      : 'HEAD 대비 작업 트리 (추적 안 된 파일 포함)')));
+  }
+  const line = el('div', 'dcount');
+  line.append(`${d.files.length}개 파일 변경 `, el('span', 'add', '+' + d.additions), ' ', el('span', 'del', '−' + d.deletions), ' ', statBar(d.additions, d.deletions));
+  head.append(line);
+  if (d.skippedUntracked && !d.commit) head.append(el('div', 'dmeta', `추적하지 않는 새 파일 ${d.skippedUntracked}개는 생략했습니다`));
+  return head;
+}
+
 function render(d) {
   if (d.error) return [el('div', 'empty', d.error)];
-  if (!d.files.length) return [el('div', 'empty', `${d.root}${d.branch ? ` (${d.branch})` : ''} · 커밋하지 않은 변경 사항이 없습니다`)];
-  const head = el('div', 'dsummary');
-  head.append(el('b', '', `${d.files.length}개 파일 변경`), ' ', el('span', 'add', '+' + d.additions), ' ', el('span', 'del', '−' + d.deletions), ' ',
-    statBar(d.additions, d.deletions), el('div', 'dmeta', `${d.root}${d.branch ? ` · ${d.branch}` : ''} · HEAD 대비 작업 트리 (추적 안 된 파일 포함)`));
-  if (d.skippedUntracked) head.append(el('div', 'dmeta', `추적하지 않는 새 파일 ${d.skippedUntracked}개는 생략했습니다`));
   const autoOpen = f => d.files.length <= AUTO_OPEN_FILES && f.additions + f.deletions <= AUTO_OPEN_LINES;
   const sections = new Map(d.files.map(f => [f.path, fileSection(f, autoOpen(f))]));
-  const tree = el('nav', 'dtree');
-  tree.append(el('div', 'dtitle', '파일 트리'), ...renderTree(buildTree(d.files), 0, sections));
+  const side = el('div', 'dside');
+  side.append(renderRanges(d));
+  if (d.files.length) {
+    const tree = el('nav', 'dtree');
+    tree.append(el('div', 'dtitle', '파일 트리'), ...renderTree(buildTree(d.files), 0, sections));
+    side.append(tree);
+  }
   const list = el('div', 'dfiles');
-  list.append(...sections.values());
+  list.append(summary(d), ...(d.files.length ? sections.values() : [el('div', 'empty', '변경된 파일이 없습니다')]));
   const body = el('div', 'dbody');
-  body.append(tree, list);
-  return [head, body];
+  body.append(side, list);
+  return [body];
 }
 
-export function resetDiff() {
-  renderedKey = '';
+let current = null; // { id, isCurrent, view, base, onLoad }
+
+function choose(next) {
+  Object.assign(current, next);
   folded.clear(); unfolded.clear();
-  pane.replaceChildren(el('div', 'empty', '불러오는 중…'));
+  pane.scrollTop = 0;
+  load();
 }
 
-// returns the diff so the tab can show its file count, or null when another session was opened meanwhile;
-// unchanged diffs keep scroll and folds
-export async function loadDiff(id, isCurrent) {
-  const d = await fetchDiff(id).catch(e => ({ error: '변경 사항을 불러오지 못했습니다: ' + e.message }));
-  if (!isCurrent()) return null;
+async function load() {
+  const { id, isCurrent, view, base, onLoad } = current;
+  const d = await fetchDiff(id, { view, base }).catch(e => ({ error: '변경 사항을 불러오지 못했습니다: ' + e.message }));
+  if (!isCurrent() || current?.id !== id) return null;
+  if (!d.error) current.view = d.view; // a commit that left the list falls back to a range
   const key = id + JSON.stringify(d);
   if (key !== renderedKey) {
     renderedKey = key;
@@ -155,5 +233,21 @@ export async function loadDiff(id, isCurrent) {
     pane.replaceChildren(...render(d));
     pane.scrollTop = scroll;
   }
+  onLoad?.(d);
   return d;
+}
+
+export function resetDiff() {
+  renderedKey = '';
+  current = null;
+  folded.clear(); unfolded.clear();
+  pane.replaceChildren(el('div', 'empty', '불러오는 중…'));
+}
+
+// Loads (or refreshes) the open session's diff in the view the reader picked; onLoad gets each result, e.g. for
+// the tab's file count. Unchanged diffs keep scroll and folds.
+export function loadDiff(id, isCurrent, onLoad) {
+  if (current?.id !== id) current = { id, view: 'all', base: undefined };
+  Object.assign(current, { isCurrent, onLoad });
+  return load();
 }

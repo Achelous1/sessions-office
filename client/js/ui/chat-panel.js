@@ -84,8 +84,10 @@ async function refreshDiff(s, force) {
   if (s.remote) return showView('chat');
   if (!force && Date.now() - diffAt < (view === 'diff' ? DIFF_REFRESH_MS : DIFF_BADGE_REFRESH_MS)) return;
   diffAt = Date.now();
-  const d = await loadDiff(s.id, () => selectedId === s.id);
-  if (d) diffCount.textContent = d.files?.length ? String(d.files.length) : '';
+  await loadDiff(s.id, () => selectedId === s.id, d => {
+    const files = d.totals ? (d.totals.all ?? d.totals.worktree).files : 0;
+    diffCount.textContent = files ? String(files) : '';
+  });
 }
 
 // refresh = a poll update of the open session (keeps the reader's scroll position unless they were at the bottom)
