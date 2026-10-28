@@ -19,10 +19,10 @@ export async function fetchSession(id) {
   return res.ok ? res.json() : null;
 }
 
-// git changes in the session's working directory (see server/diff.js): view = 'all' | 'worktree' | commit sha,
+// git changes in the session's working directory (see server/diff.js): view = 'worktree' | 'all' | commit sha,
 // base = branch to compare against ('' for none, undefined to guess). { files, commits, ... } or { error }
 export async function fetchDiff(id, { view, base } = {}) {
-  const query = new URLSearchParams({ view: view ?? 'all' });
+  const query = new URLSearchParams({ view: view ?? 'worktree' });
   if (base !== undefined) query.set('base', base);
   return (await fetch(`/api/session/${id}/diff?${query}`)).json();
 }

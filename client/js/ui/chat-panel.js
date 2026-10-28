@@ -85,7 +85,7 @@ async function refreshDiff(s, force) {
   if (!force && Date.now() - diffAt < (view === 'diff' ? DIFF_REFRESH_MS : DIFF_BADGE_REFRESH_MS)) return;
   diffAt = Date.now();
   await loadDiff(s.id, () => selectedId === s.id, d => {
-    const files = d.totals ? (d.totals.all ?? d.totals.worktree).files : 0;
+    const files = d.totals ? (d.totals.all ?? d.totals.worktree).files : 0; // the whole branch once it was counted
     diffCount.textContent = files ? String(files) : '';
   });
 }
